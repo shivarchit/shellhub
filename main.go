@@ -9,6 +9,7 @@ import (
 
 	"github.com/sarchitt/shellhub/internal/api"
 	"github.com/sarchitt/shellhub/internal/config"
+	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 )
 
 func cors(next http.Handler) http.Handler {
@@ -32,7 +33,8 @@ func run() error {
 	flag.Parse()
 
 	store := config.NewStore(*configPath)
-	apiHandler := api.NewHandler(store, nil, nil) // nil pinger/executor for now
+	sshClient := sshpkg.NewClient()
+	apiHandler := api.NewHandler(store, sshClient, sshClient)
 
 	mux := http.NewServeMux()
 
