@@ -1,17 +1,23 @@
 package main
 
 import (
+	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/sarchitt/shellhub/internal/api"
 	"github.com/sarchitt/shellhub/internal/config"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 	"github.com/sarchitt/shellhub/internal/terminal"
 )
+
+//go:embed all:frontend/dist
+var frontendFS embed.FS
 
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -31,6 +37,7 @@ func cors(next http.Handler) http.Handler {
 func run() error {
 	port := flag.Int("port", 8080, "server port")
 	configPath := flag.String("config", "servers.yaml", "config file path")
+	dev := flag.Bool("dev", false, "development mode (don't serve embedded frontend)")
 	flag.Parse()
 
 	store := config.NewStore(*configPath)
@@ -48,6 +55,31 @@ func run() error {
 
 	termHandler := terminal.NewHandler(store, sshClient)
 	mux.Handle("/api/terminal/{id}", termHandler)
+
+	// Serve embedded frontend (production mode)
+	if !*dev {
+		dist, err := fs.Sub(frontendFS, "frontend/dist")
+		if err != nil {
+			return fmt.Errorf("failed to access embedded frontend: %w", err)
+		}
+		fileServer := http.FileServer(http.FS(dist))
+
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			path := strings.TrimPrefix(r.URL.Path, "/")
+			if path == "" {
+				path = "index.html"
+			}
+			// Try to open the file in the embedded FS
+			if f, err := dist.Open(path); err == nil {
+				f.Close()
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+			// SPA fallback: serve index.html for any unmatched path
+			r.URL.Path = "/"
+			fileServer.ServeHTTP(w, r)
+		})
+	}
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("ShellHub starting on %s", addr)
