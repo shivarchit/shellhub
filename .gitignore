@@ -1,6 +1,7 @@
 # Build
 shellhub
 shellhub.exe
+dist/
 
 # Frontend
 frontend/node_modules/

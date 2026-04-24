@@ -98,6 +98,24 @@ See `servers.example.yaml` for a full example with multiple servers.
 
 > **Note:** Both `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
 
+## Cross-Platform Builds
+
+ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box:
+
+```bash
+# Build for all platforms at once
+make build-all
+
+# Or build individually
+make build-windows    # dist/shellhub-windows-amd64.exe
+make build-linux      # dist/shellhub-linux-amd64
+make build-linux-arm  # dist/shellhub-linux-arm64
+make build-mac        # dist/shellhub-darwin-amd64
+make build-mac-arm    # dist/shellhub-darwin-arm64
+```
+
+All binaries land in the `dist/` folder. Each is a self-contained single file — copy it to the target machine and run.
+
 ## CLI Flags
 
 | Flag | Default | Description |
