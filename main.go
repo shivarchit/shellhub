@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/sarchitt/shellhub/internal/api"
@@ -96,8 +98,34 @@ func run() error {
 	}
 
 	addr := fmt.Sprintf(":%d", *port)
-	log.Printf("ShellHub starting on %s", addr)
+	url := fmt.Sprintf("http://localhost:%d", *port)
+
+	fmt.Println()
+	fmt.Println("  ShellHub is running!")
+	fmt.Println()
+	fmt.Printf("  Open in browser:  %s\n", url)
+	fmt.Println()
+	fmt.Println("  Press Ctrl+C to stop.")
+	fmt.Println()
+
+	if !*dev {
+		go openBrowser(url)
+	}
+
 	return http.ListenAndServe(addr, cors(mux))
+}
+
+func openBrowser(url string) {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	case "darwin":
+		cmd = exec.Command("open", url)
+	default:
+		cmd = exec.Command("xdg-open", url)
+	}
+	cmd.Run()
 }
 
 func main() {
