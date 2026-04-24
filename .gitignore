@@ -17,6 +17,9 @@ frontend/dist/*
 .DS_Store
 Thumbs.db
 
+# Config (contains passwords)
+servers.yaml
+
 # Env
 .env
 tmp/
