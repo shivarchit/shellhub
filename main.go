@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/sarchitt/shellhub/internal/api"
@@ -36,11 +37,24 @@ func cors(next http.Handler) http.Handler {
 
 func run() error {
 	port := flag.Int("port", 8080, "server port")
-	configPath := flag.String("config", "servers.yaml", "config file path")
+	dbFlag := flag.String("db", "shellhub.db", "database file path")
 	dev := flag.Bool("dev", false, "development mode (don't serve embedded frontend)")
 	flag.Parse()
 
-	store := config.NewStore(*configPath)
+	store, err := config.NewStore(*dbFlag)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer store.Close()
+
+	// Auto-import from YAML if present (look next to the DB file)
+	yamlPath := filepath.Join(filepath.Dir(*dbFlag), "servers.yaml")
+	if n, importErr := config.ImportFromYAML(store, yamlPath); importErr != nil {
+		log.Printf("Warning: failed to import from %s: %v", yamlPath, importErr)
+	} else if n > 0 {
+		log.Printf("Imported %d servers from %s", n, yamlPath)
+	}
+
 	sshClient := sshpkg.NewClient()
 	apiHandler := api.NewHandler(store, sshClient, sshClient)
 

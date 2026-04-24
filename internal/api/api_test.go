@@ -29,7 +29,12 @@ func (m *mockExecutor) Execute(srv config.Server, cmd string) (string, int, erro
 
 func setupHandler(t *testing.T) (*Handler, *http.ServeMux) {
 	t.Helper()
-	store := config.NewStore(filepath.Join(t.TempDir(), "servers.yaml"))
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	store, err := config.NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	t.Cleanup(func() { store.Close() })
 	h := NewHandler(store, &mockPinger{online: true}, &mockExecutor{output: "hello\n", exitCode: 0})
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
@@ -65,9 +70,9 @@ func TestCreateAndListServer(t *testing.T) {
 	req = httptest.NewRequest("GET", "/api/servers", nil)
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
-	var servers []ServerResponse
+	var servers []config.Server
 	json.Unmarshal(rec.Body.Bytes(), &servers)
-	if len(servers) != 1 || servers[0].ID != 0 || servers[0].Name != "Test" {
+	if len(servers) != 1 || servers[0].ID != 1 || servers[0].Name != "Test" {
 		t.Fatalf("unexpected servers: %+v", servers)
 	}
 }
@@ -81,7 +86,7 @@ func TestUpdateServer(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	update := `{"name":"Updated","host":"2.2.2.2","port":2222,"username":"u2","password":"p2","group":"G2","quick_commands":[]}`
-	req = httptest.NewRequest("PUT", "/api/servers/0", bytes.NewBufferString(update))
+	req = httptest.NewRequest("PUT", "/api/servers/1", bytes.NewBufferString(update))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
@@ -110,11 +115,42 @@ func TestDeleteServer(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	req = httptest.NewRequest("DELETE", "/api/servers/0", nil)
+	req = httptest.NewRequest("DELETE", "/api/servers/1", nil)
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != 204 {
 		t.Fatalf("delete: expected 204, got %d", rec.Code)
+	}
+}
+
+func TestDeleteServer_IDsDoNotShift(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create two servers
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	body = `{"name":"B","host":"2.2.2.2","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req = httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Delete server 1
+	req = httptest.NewRequest("DELETE", "/api/servers/1", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// List servers — remaining server should still have ID 2
+	req = httptest.NewRequest("GET", "/api/servers", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var servers []config.Server
+	json.Unmarshal(rec.Body.Bytes(), &servers)
+	if len(servers) != 1 || servers[0].ID != 2 || servers[0].Name != "B" {
+		t.Fatalf("expected server B with ID 2, got: %+v", servers)
 	}
 }
 
@@ -126,7 +162,7 @@ func TestPingServer(t *testing.T) {
 	rec := httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 
-	req = httptest.NewRequest("POST", "/api/servers/0/ping", nil)
+	req = httptest.NewRequest("POST", "/api/servers/1/ping", nil)
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)
 	if rec.Code != 200 {
@@ -148,7 +184,7 @@ func TestExecCommand(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 
 	execBody := `{"command":"echo hello"}`
-	req = httptest.NewRequest("POST", "/api/servers/0/exec", bytes.NewBufferString(execBody))
+	req = httptest.NewRequest("POST", "/api/servers/1/exec", bytes.NewBufferString(execBody))
 	req.Header.Set("Content-Type", "application/json")
 	rec = httptest.NewRecorder()
 	mux.ServeHTTP(rec, req)

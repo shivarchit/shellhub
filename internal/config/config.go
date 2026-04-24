@@ -1,154 +1,232 @@
 package config
 
 import (
+	"database/sql"
 	"errors"
-	"os"
-	"path/filepath"
-	"sync"
 
-	"gopkg.in/yaml.v3"
+	_ "modernc.org/sqlite"
 )
 
 var ErrNotFound = errors.New("server not found")
 
 type QuickCommand struct {
-	Name    string `yaml:"name"    json:"name"`
-	Command string `yaml:"command" json:"command"`
-	Tag     string `yaml:"tag"     json:"tag"`
+	ID       int    `json:"id" db:"id"`
+	ServerID int    `json:"-" db:"server_id"`
+	Name     string `yaml:"name" json:"name" db:"name"`
+	Command  string `yaml:"command" json:"command" db:"command"`
+	Tag      string `yaml:"tag" json:"tag" db:"tag"`
 }
 
 type Server struct {
-	Name          string         `yaml:"name"           json:"name"`
-	Host          string         `yaml:"host"           json:"host"`
-	Port          int            `yaml:"port"           json:"port"`
-	Username      string         `yaml:"username"       json:"username"`
-	Password      string         `yaml:"password"       json:"password"`
-	Group         string         `yaml:"group"          json:"group"`
+	ID            int            `json:"id" db:"id"`
+	Name          string         `yaml:"name" json:"name" db:"name"`
+	Host          string         `yaml:"host" json:"host" db:"host"`
+	Port          int            `yaml:"port" json:"port" db:"port"`
+	Username      string         `yaml:"username" json:"username" db:"username"`
+	Password      string         `yaml:"password" json:"password" db:"password"`
+	Group         string         `yaml:"group" json:"group" db:"group"`
 	QuickCommands []QuickCommand `yaml:"quick_commands" json:"quick_commands"`
 }
 
-type Config struct {
-	Servers []Server `yaml:"servers" json:"servers"`
-}
-
 type Store struct {
-	path string
-	mu   sync.Mutex
+	db *sql.DB
 }
 
-func NewStore(path string) *Store {
-	return &Store{path: path}
-}
-
-func (s *Store) Load() (*Config, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.loadUnsafe()
-}
-
-func (s *Store) loadUnsafe() (*Config, error) {
-	data, err := os.ReadFile(s.path)
+func NewStore(dbPath string) (*Store, error) {
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return &Config{}, nil
-		}
 		return nil, err
 	}
-	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
 		return nil, err
 	}
-	return &cfg, nil
+	if _, err := db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS servers (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			host TEXT NOT NULL,
+			port INTEGER NOT NULL DEFAULT 22,
+			username TEXT NOT NULL,
+			password TEXT NOT NULL,
+			"group" TEXT NOT NULL DEFAULT ''
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS quick_commands (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			server_id INTEGER NOT NULL,
+			name TEXT NOT NULL,
+			command TEXT NOT NULL,
+			tag TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return &Store{db: db}, nil
 }
 
-func (s *Store) Save(cfg *Config) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.saveUnsafe(cfg)
-}
-
-func (s *Store) saveUnsafe(cfg *Config) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(s.path)
-	tmp, err := os.CreateTemp(dir, "servers-*.yaml")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmpPath)
-		return err
-	}
-	tmp.Close()
-	return os.Rename(tmpPath, s.path)
+func (s *Store) Close() error {
+	return s.db.Close()
 }
 
 func (s *Store) GetServers() ([]Server, error) {
-	cfg, err := s.Load()
+	rows, err := s.db.Query(`SELECT id, name, host, port, username, password, "group" FROM servers ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
-	return cfg.Servers, nil
+	defer rows.Close()
+
+	var servers []Server
+	for rows.Next() {
+		var srv Server
+		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group); err != nil {
+			return nil, err
+		}
+		cmds, err := s.getQuickCommands(srv.ID)
+		if err != nil {
+			return nil, err
+		}
+		srv.QuickCommands = cmds
+		servers = append(servers, srv)
+	}
+	if servers == nil {
+		servers = []Server{}
+	}
+	return servers, rows.Err()
 }
 
 func (s *Store) GetServer(id int) (*Server, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cfg, err := s.loadUnsafe()
+	var srv Server
+	err := s.db.QueryRow(`SELECT id, name, host, port, username, password, "group" FROM servers WHERE id = ?`, id).
+		Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	cmds, err := s.getQuickCommands(srv.ID)
 	if err != nil {
 		return nil, err
 	}
-	if id < 0 || id >= len(cfg.Servers) {
-		return nil, ErrNotFound
-	}
-	return &cfg.Servers[id], nil
+	srv.QuickCommands = cmds
+	return &srv, nil
 }
 
 func (s *Store) AddServer(srv Server) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cfg, err := s.loadUnsafe()
-	if err != nil {
-		return 0, err
-	}
 	if srv.Port == 0 {
 		srv.Port = 22
 	}
-	cfg.Servers = append(cfg.Servers, srv)
-	if err := s.saveUnsafe(cfg); err != nil {
+	res, err := s.db.Exec(
+		`INSERT INTO servers (name, host, port, username, password, "group") VALUES (?, ?, ?, ?, ?, ?)`,
+		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group,
+	)
+	if err != nil {
 		return 0, err
 	}
-	return len(cfg.Servers) - 1, nil
+	id64, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	id := int(id64)
+
+	for _, cmd := range srv.QuickCommands {
+		if _, err := s.db.Exec(
+			`INSERT INTO quick_commands (server_id, name, command, tag) VALUES (?, ?, ?, ?)`,
+			id, cmd.Name, cmd.Command, cmd.Tag,
+		); err != nil {
+			return 0, err
+		}
+	}
+	return id, nil
 }
 
 func (s *Store) UpdateServer(id int, srv Server) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cfg, err := s.loadUnsafe()
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	if id < 0 || id >= len(cfg.Servers) {
-		return ErrNotFound
+	defer tx.Rollback()
+
+	// Check exists
+	var exists int
+	err = tx.QueryRow(`SELECT id FROM servers WHERE id = ?`, id).Scan(&exists)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
 	}
-	cfg.Servers[id] = srv
-	return s.saveUnsafe(cfg)
+
+	if _, err := tx.Exec(
+		`UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password = ?, "group" = ? WHERE id = ?`,
+		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, id,
+	); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec(`DELETE FROM quick_commands WHERE server_id = ?`, id); err != nil {
+		return err
+	}
+
+	for _, cmd := range srv.QuickCommands {
+		if _, err := tx.Exec(
+			`INSERT INTO quick_commands (server_id, name, command, tag) VALUES (?, ?, ?, ?)`,
+			id, cmd.Name, cmd.Command, cmd.Tag,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *Store) DeleteServer(id int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	cfg, err := s.loadUnsafe()
+	res, err := s.db.Exec(`DELETE FROM servers WHERE id = ?`, id)
 	if err != nil {
 		return err
 	}
-	if id < 0 || id >= len(cfg.Servers) {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
 		return ErrNotFound
 	}
-	cfg.Servers = append(cfg.Servers[:id], cfg.Servers[id+1:]...)
-	return s.saveUnsafe(cfg)
+	return nil
+}
+
+func (s *Store) getQuickCommands(serverID int) ([]QuickCommand, error) {
+	rows, err := s.db.Query(`SELECT id, server_id, name, command, tag FROM quick_commands WHERE server_id = ? ORDER BY id`, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cmds []QuickCommand
+	for rows.Next() {
+		var cmd QuickCommand
+		if err := rows.Scan(&cmd.ID, &cmd.ServerID, &cmd.Name, &cmd.Command, &cmd.Tag); err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd)
+	}
+	if cmds == nil {
+		cmds = []QuickCommand{}
+	}
+	return cmds, rows.Err()
 }

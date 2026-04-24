@@ -20,6 +20,10 @@ Thumbs.db
 # Config (contains passwords)
 servers.yaml
 
+# Database
+*.db
+shellhub.db
+
 # Env
 .env
 tmp/

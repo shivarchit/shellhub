@@ -18,11 +18,6 @@ type Executor interface {
 	Execute(server config.Server, command string) (string, int, error)
 }
 
-type ServerResponse struct {
-	ID int `json:"id"`
-	config.Server
-}
-
 type Handler struct {
 	store    *config.Store
 	pinger   Pinger
@@ -48,11 +43,7 @@ func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
-	resp := make([]ServerResponse, len(servers))
-	for i, s := range servers {
-		resp[i] = ServerResponse{ID: i, Server: s}
-	}
-	writeJSON(w, 200, resp)
+	writeJSON(w, 200, servers)
 }
 
 func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +58,7 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	created, _ := h.store.GetServer(id)
-	writeJSON(w, 201, ServerResponse{ID: id, Server: *created})
+	writeJSON(w, 201, created)
 }
 
 func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +81,7 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, _ := h.store.GetServer(id)
-	writeJSON(w, 200, ServerResponse{ID: id, Server: *updated})
+	writeJSON(w, 200, updated)
 }
 
 func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request) {
