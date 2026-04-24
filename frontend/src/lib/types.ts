@@ -1,0 +1,27 @@
+export interface QuickCommand {
+  name: string
+  command: string
+  tag: string
+}
+
+export interface Server {
+  id: number
+  name: string
+  host: string
+  port: number
+  username: string
+  password: string
+  group: string
+  quick_commands: QuickCommand[]
+}
+
+export type ServerInput = Omit<Server, 'id'>
+
+export interface PingResult {
+  online: boolean
+}
+
+export interface ExecResult {
+  output: string
+  exit_code: number
+}

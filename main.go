@@ -10,6 +10,7 @@ import (
 	"github.com/sarchitt/shellhub/internal/api"
 	"github.com/sarchitt/shellhub/internal/config"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
+	"github.com/sarchitt/shellhub/internal/terminal"
 )
 
 func cors(next http.Handler) http.Handler {
@@ -44,6 +45,9 @@ func run() error {
 	})
 
 	apiHandler.RegisterRoutes(mux)
+
+	termHandler := terminal.NewHandler(store, sshClient)
+	mux.Handle("/api/terminal/{id}", termHandler)
 
 	addr := fmt.Sprintf(":%d", *port)
 	log.Printf("ShellHub starting on %s", addr)
