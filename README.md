@@ -11,24 +11,31 @@ Built with Go + React. Ships as a single binary.
 - **Quick Commands** — save named commands per server (flush cache, restart service, tail logs) and run them with one click
 - **Command Execution** — run quick commands from the dashboard without opening a full terminal session, see output in a modal
 - **Single Binary** — Go embeds the entire React frontend, deploy one file and you're done
-- **YAML Config** — servers and commands stored in a simple YAML file, editable from the UI or by hand
+- **SQLite Storage** — servers and commands stored in a local SQLite database, managed entirely from the web UI
+- **YAML Import** — optionally bootstrap from a `servers.yaml` file on first run
 
 ## Quick Start
 
 ### From binary
 
 ```bash
-# Copy the example config
-cp servers.example.yaml servers.yaml
-
-# Edit with your servers
-vim servers.yaml
-
-# Run
+# Just run it
 ./shellhub
 ```
 
-Open `http://localhost:8080` in your browser.
+Open `http://localhost:8080` and add servers from the browser. Everything is stored in `shellhub.db` alongside the binary.
+
+### Import from YAML (optional)
+
+If you have existing server configs, place a `servers.yaml` next to the binary before first run:
+
+```bash
+cp servers.example.yaml servers.yaml
+vim servers.yaml   # fill in your real servers
+./shellhub         # auto-imports into SQLite on first start
+```
+
+The YAML is only read once — when the database is empty. After import, all changes go through the web UI into SQLite.
 
 ### From source
 
@@ -37,9 +44,6 @@ Open `http://localhost:8080` in your browser.
 
 # Build everything (frontend + Go binary)
 make build
-
-# Copy and edit config
-cp servers.example.yaml servers.yaml
 
 # Run
 ./shellhub.exe
@@ -59,9 +63,19 @@ cd frontend && npm run dev
 
 Open `http://localhost:5173` for the frontend with hot reload.
 
-## Configuration
+## Storage
 
-Copy `servers.example.yaml` to `servers.yaml` and add your servers:
+ShellHub uses a local SQLite database (`shellhub.db`) created automatically next to the binary. Add, edit, and delete servers entirely from the web UI.
+
+```
+my-folder/
+├── shellhub.exe     ← the binary
+└── shellhub.db      ← auto-created on first run
+```
+
+### YAML Import
+
+On startup, if a `servers.yaml` exists next to the database and the database has no servers yet, ShellHub auto-imports from the YAML:
 
 ```yaml
 servers:
@@ -69,7 +83,7 @@ servers:
     host: "10.0.1.50"
     port: 22
     username: "admin"
-    password: "mypassword123"
+    password: "changeme"
     group: "Production"
     quick_commands:
       - name: "Flush Cache"
@@ -80,21 +94,21 @@ servers:
         tag: "service"
 ```
 
-You can also add, edit, and delete servers from the web UI — changes are saved back to the YAML file.
+See `servers.example.yaml` for a full example with multiple servers.
 
-> **Note:** `servers.yaml` contains plaintext passwords and is gitignored. Never commit it.
+> **Note:** Both `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
 
 ## CLI Flags
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-port` | `8080` | HTTP server port |
-| `-config` | `servers.yaml` | Path to the YAML config file |
+| `-db` | `shellhub.db` | Path to the SQLite database file |
 | `-dev` | `false` | Development mode (skip embedded frontend) |
 
 ## Tech Stack
 
-**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, gopkg.in/yaml.v3
+**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite
 
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, React Router
 
@@ -103,10 +117,10 @@ You can also add, edit, and delete servers from the web UI — changes are saved
 ```
 shellhub/
 ├── main.go                 # Entry point, routing, embedded frontend
-├── servers.example.yaml    # Example config (copy to servers.yaml)
+├── servers.example.yaml    # Example config for YAML import
 ├── Makefile                # Build commands
 ├── internal/
-│   ├── config/             # YAML config store
+│   ├── config/             # SQLite store + YAML import
 │   ├── ssh/                # SSH client + interactive session
 │   ├── api/                # REST API handlers
 │   └── terminal/           # WebSocket ↔ SSH bridge
