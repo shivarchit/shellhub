@@ -19,7 +19,11 @@ function Build-Binary($os, $arch, $output) {
     Push-Location $Root
     $env:GOOS = $os
     $env:GOARCH = $arch
-    go build -o "build/$output" .
+    if ($os -eq "windows") {
+        go build -ldflags "-H windowsgui" -o "build/$output" .
+    } else {
+        go build -o "build/$output" .
+    }
     Remove-Item Env:GOOS
     Remove-Item Env:GOARCH
     Pop-Location
@@ -39,7 +43,7 @@ switch ($Target) {
         Build-Frontend
         Write-Host "Building shellhub.exe..." -ForegroundColor Cyan
         Push-Location $Root
-        go build -o shellhub.exe .
+        go build -ldflags "-H windowsgui" -o shellhub.exe .
         Pop-Location
         Write-Host "Done: shellhub.exe (in project root)" -ForegroundColor Green
     }

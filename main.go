@@ -17,6 +17,7 @@ import (
 	"github.com/sarchitt/shellhub/internal/config"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 	"github.com/sarchitt/shellhub/internal/terminal"
+	"github.com/sarchitt/shellhub/internal/tray"
 )
 
 //go:embed all:frontend/dist
@@ -37,20 +38,18 @@ func cors(next http.Handler) http.Handler {
 	})
 }
 
-func run() error {
-	port := flag.Int("port", 8080, "server port")
-	dbFlag := flag.String("db", "shellhub.db", "database file path")
-	dev := flag.Bool("dev", false, "development mode (don't serve embedded frontend)")
-	flag.Parse()
-
-	store, err := config.NewStore(*dbFlag)
+// runServer starts the HTTP server. It blocks until the server stops or
+// returns an error. This is called directly in dev mode, or from inside
+// a goroutine when running with the system tray.
+func runServer(port int, dbPath string, dev bool) error {
+	store, err := config.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 	defer store.Close()
 
 	// Auto-import from YAML if present (look next to the DB file)
-	yamlPath := filepath.Join(filepath.Dir(*dbFlag), "servers.yaml")
+	yamlPath := filepath.Join(filepath.Dir(dbPath), "servers.yaml")
 	if n, importErr := config.ImportFromYAML(store, yamlPath); importErr != nil {
 		log.Printf("Warning: failed to import from %s: %v", yamlPath, importErr)
 	} else if n > 0 {
@@ -73,7 +72,7 @@ func run() error {
 	mux.Handle("/api/terminal/{id}", termHandler)
 
 	// Serve embedded frontend (production mode)
-	if !*dev {
+	if !dev {
 		dist, err := fs.Sub(frontendFS, "frontend/dist")
 		if err != nil {
 			return fmt.Errorf("failed to access embedded frontend: %w", err)
@@ -97,21 +96,8 @@ func run() error {
 		})
 	}
 
-	addr := fmt.Sprintf(":%d", *port)
-	url := fmt.Sprintf("http://localhost:%d", *port)
-
-	fmt.Println()
-	fmt.Println("  ShellHub is running!")
-	fmt.Println()
-	fmt.Printf("  Open in browser:  %s\n", url)
-	fmt.Println()
-	fmt.Println("  Press Ctrl+C to stop.")
-	fmt.Println()
-
-	if !*dev {
-		go openBrowser(url)
-	}
-
+	addr := fmt.Sprintf(":%d", port)
+	log.Printf("ShellHub server listening on %s", addr)
 	return http.ListenAndServe(addr, cors(mux))
 }
 
@@ -129,7 +115,26 @@ func openBrowser(url string) {
 }
 
 func main() {
-	if err := run(); err != nil {
-		log.Fatal(err)
+	port := flag.Int("port", 8080, "server port")
+	dbPath := flag.String("db", "shellhub.db", "database file path")
+	dev := flag.Bool("dev", false, "development mode (console, no tray)")
+	flag.Parse()
+
+	if *dev {
+		// Dev mode: run with console output, no tray icon
+		fmt.Println()
+		fmt.Println("  ShellHub is running! (dev mode)")
+		fmt.Println()
+		fmt.Printf("  Open in browser:  http://localhost:%d\n", *port)
+		fmt.Println()
+		fmt.Println("  Press Ctrl+C to stop.")
+		fmt.Println()
+
+		if err := runServer(*port, *dbPath, true); err != nil {
+			log.Fatal(err)
+		}
+	} else {
+		// Production mode: system tray icon, no console window
+		tray.Run(*port, *dbPath, runServer, openBrowser)
 	}
 }

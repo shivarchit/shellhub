@@ -8,9 +8,9 @@ dev:
 	@echo "  1: cd .. && go run . -dev"
 	@echo "  2: cd ../frontend && npm run dev"
 
-# Build for current platform
+# Build for current platform (uses -H windowsgui to hide console on Windows)
 build: frontend-build
-	cd $(ROOT) && go build -o shellhub.exe .
+	cd $(ROOT) && go build -ldflags "-H windowsgui" -o shellhub.exe .
 
 # Build frontend assets
 frontend-build:
@@ -22,7 +22,7 @@ build-all: frontend-build build-windows build-linux build-linux-arm build-mac bu
 
 build-windows: frontend-build
 	@mkdir -p dist
-	cd $(ROOT) && GOOS=windows GOARCH=amd64 go build -o build/dist/shellhub-windows-amd64.exe .
+	cd $(ROOT) && GOOS=windows GOARCH=amd64 go build -ldflags "-H windowsgui" -o build/dist/shellhub-windows-amd64.exe .
 
 build-linux: frontend-build
 	@mkdir -p dist
