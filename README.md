@@ -42,11 +42,11 @@ The YAML is only read once — when the database is empty. After import, all cha
 ```bash
 # Prerequisites: Go 1.22+, Node 18+
 
-# Build everything (frontend + Go binary)
-make build
+# Windows (PowerShell)
+./build.ps1 build
 
-# Run
-./shellhub.exe
+# Linux / macOS
+make build
 ```
 
 ### Development mode
@@ -100,18 +100,30 @@ See `servers.example.yaml` for a full example with multiple servers.
 
 ## Cross-Platform Builds
 
-ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box:
+ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box.
+
+**PowerShell (Windows):**
+
+```powershell
+./build.ps1 build-all       # all 5 platforms
+
+./build.ps1 windows         # dist/shellhub-windows-amd64.exe
+./build.ps1 linux           # dist/shellhub-linux-amd64
+./build.ps1 linux-arm       # dist/shellhub-linux-arm64
+./build.ps1 mac             # dist/shellhub-darwin-amd64
+./build.ps1 mac-arm         # dist/shellhub-darwin-arm64
+```
+
+**Bash (Linux / macOS):**
 
 ```bash
-# Build for all platforms at once
-make build-all
+make build-all              # all 5 platforms
 
-# Or build individually
-make build-windows    # dist/shellhub-windows-amd64.exe
-make build-linux      # dist/shellhub-linux-amd64
-make build-linux-arm  # dist/shellhub-linux-arm64
-make build-mac        # dist/shellhub-darwin-amd64
-make build-mac-arm    # dist/shellhub-darwin-arm64
+make build-windows          # dist/shellhub-windows-amd64.exe
+make build-linux            # dist/shellhub-linux-amd64
+make build-linux-arm        # dist/shellhub-linux-arm64
+make build-mac              # dist/shellhub-darwin-amd64
+make build-mac-arm          # dist/shellhub-darwin-arm64
 ```
 
 All binaries land in the `dist/` folder. Each is a self-contained single file — copy it to the target machine and run.
