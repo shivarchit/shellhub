@@ -1,5 +1,6 @@
 import type { Server } from '../lib/types'
 import { cn } from '../lib/utils'
+import Logo from './Logo'
 
 interface ConnectionBarProps {
   server: Server | null
@@ -29,22 +30,11 @@ export default function ConnectionBar({
       <div className="flex items-center gap-3">
         <button
           onClick={onBack}
-          className="flex items-center gap-1.5 text-sm text-text-secondary hover:text-text-primary transition-colors"
+          className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            className="shrink-0"
-          >
-            <path
-              d="M10 12L6 8L10 4"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+          <Logo size={24} />
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+            <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           Dashboard
         </button>

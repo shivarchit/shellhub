@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react'
 import type { Server } from '../lib/types'
 import { cn } from '../lib/utils'
 import StatusDot from './StatusDot'
+import Logo from './Logo'
 
 interface SidebarProps {
   servers: Server[]
@@ -45,9 +46,7 @@ export default function Sidebar({
     <aside className="flex flex-col w-64 h-full bg-surface-800 border-r border-border">
       {/* Header */}
       <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border">
-        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 text-white text-xs font-mono font-bold">
-          {'>'}_
-        </div>
+        <Logo size={32} />
         <span className="text-text-primary font-semibold text-lg tracking-tight">
           ShellHub
         </span>
