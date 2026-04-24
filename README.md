@@ -43,9 +43,11 @@ The YAML is only read once — when the database is empty. After import, all cha
 # Prerequisites: Go 1.22+, Node 18+
 
 # Windows (PowerShell)
+cd build
 ./build.ps1 build
 
 # Linux / macOS
+cd build
 make build
 ```
 
@@ -102,31 +104,35 @@ See `servers.example.yaml` for a full example with multiple servers.
 
 ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box.
 
+All build scripts live in the `build/` directory. Run them from there:
+
 **PowerShell (Windows):**
 
 ```powershell
+cd build
 ./build.ps1 build-all       # all 5 platforms
 
-./build.ps1 windows         # dist/shellhub-windows-amd64.exe
-./build.ps1 linux           # dist/shellhub-linux-amd64
-./build.ps1 linux-arm       # dist/shellhub-linux-arm64
-./build.ps1 mac             # dist/shellhub-darwin-amd64
-./build.ps1 mac-arm         # dist/shellhub-darwin-arm64
+./build.ps1 windows         # build/dist/shellhub-windows-amd64.exe
+./build.ps1 linux           # build/dist/shellhub-linux-amd64
+./build.ps1 linux-arm       # build/dist/shellhub-linux-arm64
+./build.ps1 mac             # build/dist/shellhub-darwin-amd64
+./build.ps1 mac-arm         # build/dist/shellhub-darwin-arm64
 ```
 
 **Bash (Linux / macOS):**
 
 ```bash
+cd build
 make build-all              # all 5 platforms
 
-make build-windows          # dist/shellhub-windows-amd64.exe
-make build-linux            # dist/shellhub-linux-amd64
-make build-linux-arm        # dist/shellhub-linux-arm64
-make build-mac              # dist/shellhub-darwin-amd64
-make build-mac-arm          # dist/shellhub-darwin-arm64
+make build-windows          # build/dist/shellhub-windows-amd64.exe
+make build-linux            # build/dist/shellhub-linux-amd64
+make build-linux-arm        # build/dist/shellhub-linux-arm64
+make build-mac              # build/dist/shellhub-darwin-amd64
+make build-mac-arm          # build/dist/shellhub-darwin-arm64
 ```
 
-All binaries land in the `dist/` folder. Each is a self-contained single file — copy it to the target machine and run.
+Cross-platform binaries land in `build/dist/`. Each is a self-contained single file — copy it to the target machine and run.
 
 ## CLI Flags
 
@@ -148,7 +154,10 @@ All binaries land in the `dist/` folder. Each is a self-contained single file �
 shellhub/
 ├── main.go                 # Entry point, routing, embedded frontend
 ├── servers.example.yaml    # Example config for YAML import
-├── Makefile                # Build commands
+├── build/
+│   ├── build.ps1           # PowerShell build script (Windows)
+│   ├── Makefile            # Make build script (Linux/macOS)
+│   └── dist/               # Cross-platform binaries (gitignored)
 ├── internal/
 │   ├── config/             # SQLite store + YAML import
 │   ├── ssh/                # SSH client + interactive session

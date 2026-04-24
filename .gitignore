@@ -2,6 +2,7 @@
 shellhub
 shellhub.exe
 dist/
+build/dist/
 
 # Frontend
 frontend/node_modules/

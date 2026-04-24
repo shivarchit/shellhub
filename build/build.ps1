@@ -4,9 +4,11 @@ param(
     [string]$Target = "build"
 )
 
+$Root = Resolve-Path "$PSScriptRoot/.."
+
 function Build-Frontend {
     Write-Host "Building frontend..." -ForegroundColor Cyan
-    Push-Location frontend
+    Push-Location "$Root/frontend"
     npm ci --silent
     npm run build
     Pop-Location
@@ -14,17 +16,19 @@ function Build-Frontend {
 
 function Build-Binary($os, $arch, $output) {
     Write-Host "Building $output..." -ForegroundColor Cyan
+    Push-Location $Root
     $env:GOOS = $os
     $env:GOARCH = $arch
-    go build -o $output .
+    go build -o "build/$output" .
     Remove-Item Env:GOOS
     Remove-Item Env:GOARCH
-    Write-Host "  -> $output" -ForegroundColor Green
+    Pop-Location
+    Write-Host "  -> build/$output" -ForegroundColor Green
 }
 
 switch ($Target) {
     "dev" {
-        Write-Host "Run in two terminals:" -ForegroundColor Yellow
+        Write-Host "Run in two terminals from project root:" -ForegroundColor Yellow
         Write-Host "  1: go run . -dev"
         Write-Host "  2: cd frontend; npm run dev"
     }
@@ -34,8 +38,10 @@ switch ($Target) {
     "build" {
         Build-Frontend
         Write-Host "Building shellhub.exe..." -ForegroundColor Cyan
+        Push-Location $Root
         go build -o shellhub.exe .
-        Write-Host "Done: shellhub.exe" -ForegroundColor Green
+        Pop-Location
+        Write-Host "Done: shellhub.exe (in project root)" -ForegroundColor Green
     }
     "windows" {
         Build-Frontend
@@ -70,14 +76,14 @@ switch ($Target) {
         Build-Binary "linux"   "arm64" "dist/shellhub-linux-arm64"
         Build-Binary "darwin"  "amd64" "dist/shellhub-darwin-amd64"
         Build-Binary "darwin"  "arm64" "dist/shellhub-darwin-arm64"
-        Write-Host "`nAll builds complete. Check dist/" -ForegroundColor Green
+        Write-Host "`nAll builds complete. Check build/dist/" -ForegroundColor Green
     }
     "clean" {
-        Remove-Item -Force -ErrorAction SilentlyContinue shellhub.exe, shellhub
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue dist
-        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue frontend/dist
-        New-Item -ItemType Directory -Force -Path frontend/dist | Out-Null
-        New-Item -ItemType File -Force -Path frontend/dist/.gitkeep | Out-Null
+        Remove-Item -Force -ErrorAction SilentlyContinue "$Root/shellhub.exe", "$Root/shellhub"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$PSScriptRoot/dist"
+        Remove-Item -Recurse -Force -ErrorAction SilentlyContinue "$Root/frontend/dist"
+        New-Item -ItemType Directory -Force -Path "$Root/frontend/dist" | Out-Null
+        New-Item -ItemType File -Force -Path "$Root/frontend/dist/.gitkeep" | Out-Null
         Write-Host "Cleaned." -ForegroundColor Green
     }
 }
