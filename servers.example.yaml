@@ -24,6 +24,9 @@ servers:
       - name: "Clear htdocs"
         command: "cd /opt/apps/data/htdocs/ && pwd && rm -rf *"
         tag: "deploy"
+      - name: "Create marker file"
+        command: "echo 'deployed at '$(date) > /opt/apps/data/htdocs/deploy.txt && cat /opt/apps/data/htdocs/deploy.txt"
+        tag: "deploy"
 
   - name: "Staging Server"
     host: "10.0.2.10"
