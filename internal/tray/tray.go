@@ -4,25 +4,40 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/getlantern/systray"
+	"github.com/sarchitt/shellhub/internal/settings"
+	"github.com/sqweek/dialog"
 )
 
-// ServerFunc is the function signature for starting the HTTP server.
-// It receives the port, database path, and dev flag, and blocks until
-// the server stops or an error occurs.
 type ServerFunc func(port int, dbPath string, dev bool) error
-
-// OpenBrowserFunc opens the given URL in the default browser.
 type OpenBrowserFunc func(url string)
 
-// Run starts the system-tray event loop. It shows a tray icon with menu
-// items for opening the browser and stopping the server. The HTTP server
-// is started in a background goroutine. This function blocks until the
-// user chooses "Stop Server" or the server exits with an error.
-func Run(port int, dbPath string, startServer ServerFunc, openBrowser OpenBrowserFunc) {
-	url := fmt.Sprintf("http://localhost:%d", port)
+// resolveDBPath checks saved settings, then shows folder picker if needed.
+func resolveDBPath(dbFlag string) string {
+	if dbFlag != "shellhub.db" {
+		return dbFlag
+	}
 
+	saved, err := settings.Load()
+	if err == nil && saved != nil && saved.DBPath != "" {
+		if _, statErr := os.Stat(filepath.Dir(saved.DBPath)); statErr == nil {
+			return saved.DBPath
+		}
+	}
+
+	dir, err := dialog.Directory().Title("ShellHub — Choose where to store your data").Browse()
+	if err != nil {
+		return "shellhub.db"
+	}
+
+	dbPath := filepath.Join(dir, "shellhub.db")
+	settings.Save(&settings.Settings{DBPath: dbPath})
+	return dbPath
+}
+
+func Run(port int, dbFlag string, startServer ServerFunc, openBrowser OpenBrowserFunc) {
 	onReady := func() {
 		systray.SetIcon(GenerateIcon())
 		systray.SetTitle("ShellHub")
@@ -32,7 +47,9 @@ func Run(port int, dbPath string, startServer ServerFunc, openBrowser OpenBrowse
 		systray.AddSeparator()
 		mQuit := systray.AddMenuItem("Stop Server", "Stop ShellHub and exit")
 
-		// Start the HTTP server in a goroutine
+		dbPath := resolveDBPath(dbFlag)
+		url := fmt.Sprintf("http://localhost:%d", port)
+
 		go func() {
 			if err := startServer(port, dbPath, false); err != nil {
 				log.Printf("Server error: %v", err)
@@ -40,10 +57,8 @@ func Run(port int, dbPath string, startServer ServerFunc, openBrowser OpenBrowse
 			}
 		}()
 
-		// Auto-open the browser
 		go openBrowser(url)
 
-		// Handle menu clicks
 		go func() {
 			for {
 				select {

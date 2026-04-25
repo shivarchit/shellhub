@@ -21,7 +21,6 @@ Thumbs.db
 
 # Config (contains passwords)
 servers.yaml
-shellhub-settings.json
 
 # Database
 *.db
