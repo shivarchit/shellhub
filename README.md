@@ -2,7 +2,7 @@
 
 A lightweight web-based SSH client and server management tool. Connect to your servers, run commands, and manage quick shortcuts — all from the browser.
 
-Built with Go + React. Ships as a single binary.
+Built with Go + React. Ships as a single binary with system tray support.
 
 ## Features
 
@@ -10,6 +10,7 @@ Built with Go + React. Ships as a single binary.
 - **Interactive Terminal** — full xterm.js terminal in the browser with color support, resize, and tab completion
 - **Quick Commands** — save named commands per server (flush cache, restart service, tail logs) and run them with one click
 - **Command Execution** — run quick commands from the dashboard without opening a full terminal session, see output in a modal
+- **System Tray App** — runs in the system tray with no console window. Right-click for "Open in Browser" and "Stop Server"
 - **Single Binary** — Go embeds the entire React frontend, deploy one file and you're done
 - **SQLite Storage** — servers and commands stored in a local SQLite database, managed entirely from the web UI
 - **YAML Import** — optionally bootstrap from a `servers.yaml` file on first run
@@ -18,16 +19,27 @@ Built with Go + React. Ships as a single binary.
 
 ### From binary
 
-```bash
-# Just run it
-./shellhub
-```
+Just double-click `shellhub.exe` (or run `./shellhub` on Linux/macOS).
 
-Open `http://localhost:8080` and add servers from the browser. Everything is stored in `shellhub.db` alongside the binary.
+On first launch:
+1. A folder picker dialog asks where to store your data
+2. Your browser opens automatically to the dashboard
+3. A tray icon appears — right-click it to open the browser or stop the server
+
+Add servers from the browser. Everything is stored in `shellhub.db` in the folder you chose.
+
+```
+your-chosen-folder/
+└── shellhub.db      ← auto-created, stores all server configs
+
+next-to-exe/
+├── shellhub.exe
+└── shellhub-settings.json   ← remembers your chosen DB location
+```
 
 ### Import from YAML (optional)
 
-If you have existing server configs, place a `servers.yaml` next to the binary before first run:
+If you have existing server configs, place a `servers.yaml` next to the database before first run:
 
 ```bash
 cp servers.example.yaml servers.yaml
@@ -56,7 +68,7 @@ make build
 Run the Go backend and Vite dev server separately for hot reload:
 
 ```bash
-# Terminal 1: Go backend
+# Terminal 1: Go backend (console mode, no tray)
 go run . -dev
 
 # Terminal 2: React frontend (proxies API to :8080)
@@ -67,12 +79,12 @@ Open `http://localhost:5173` for the frontend with hot reload.
 
 ## Storage
 
-ShellHub uses a local SQLite database (`shellhub.db`) created automatically next to the binary. Add, edit, and delete servers entirely from the web UI.
+On first launch, ShellHub asks you to pick a folder for the database. The choice is saved to `shellhub-settings.json` next to the exe and remembered on restart.
 
-```
-my-folder/
-├── shellhub.exe     ← the binary
-└── shellhub.db      ← auto-created on first run
+You can override the DB location with the `-db` flag:
+
+```bash
+./shellhub -db /path/to/my/shellhub.db
 ```
 
 ### YAML Import
@@ -98,11 +110,11 @@ servers:
 
 See `servers.example.yaml` for a full example with multiple servers.
 
-> **Note:** Both `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
+> **Note:** `servers.yaml`, `shellhub.db`, and `shellhub-settings.json` contain credentials and are gitignored.
 
 ## Cross-Platform Builds
 
-ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box.
+ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box. Windows builds include `-H windowsgui` to hide the console window.
 
 All build scripts live in the `build/` directory. Run them from there:
 
@@ -139,12 +151,12 @@ Cross-platform binaries land in `build/dist/`. Each is a self-contained single f
 | Flag | Default | Description |
 |------|---------|-------------|
 | `-port` | `8080` | HTTP server port |
-| `-db` | `shellhub.db` | Path to the SQLite database file |
-| `-dev` | `false` | Development mode (skip embedded frontend) |
+| `-db` | `shellhub.db` | Path to the SQLite database file (overrides saved setting) |
+| `-dev` | `false` | Development mode (console output, no tray, no folder picker) |
 
 ## Tech Stack
 
-**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite
+**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray
 
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, React Router
 
@@ -160,9 +172,11 @@ shellhub/
 │   └── dist/               # Cross-platform binaries (gitignored)
 ├── internal/
 │   ├── config/             # SQLite store + YAML import
+│   ├── settings/           # Persisted app settings (DB path)
 │   ├── ssh/                # SSH client + interactive session
 │   ├── api/                # REST API handlers
-│   └── terminal/           # WebSocket ↔ SSH bridge
+│   ├── terminal/           # WebSocket ↔ SSH bridge
+│   └── tray/               # System tray icon + menu
 └── frontend/
     └── src/
         ├── pages/          # Dashboard, Terminal
