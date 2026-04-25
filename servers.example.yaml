@@ -21,6 +21,9 @@ servers:
       - name: "Restart AEM"
         command: "sudo systemctl restart aem"
         tag: "service"
+      - name: "Clear htdocs"
+        command: "cd /opt/apps/data/htdocs/ && pwd && rm -rf *"
+        tag: "deploy"
 
   - name: "Staging Server"
     host: "10.0.2.10"
