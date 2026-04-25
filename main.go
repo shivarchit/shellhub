@@ -15,9 +15,11 @@ import (
 
 	"github.com/sarchitt/shellhub/internal/api"
 	"github.com/sarchitt/shellhub/internal/config"
+	"github.com/sarchitt/shellhub/internal/settings"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 	"github.com/sarchitt/shellhub/internal/terminal"
 	"github.com/sarchitt/shellhub/internal/tray"
+	"github.com/sqweek/dialog"
 )
 
 //go:embed all:frontend/dist
@@ -114,27 +116,54 @@ func openBrowser(url string) {
 	cmd.Run()
 }
 
+// resolveDBPath determines where the database lives.
+// Priority: CLI flag > saved settings > first-run folder picker.
+func resolveDBPath(flagValue string, dev bool) string {
+	if flagValue != "shellhub.db" {
+		return flagValue
+	}
+
+	if dev {
+		return "shellhub.db"
+	}
+
+	saved, err := settings.Load()
+	if err == nil && saved != nil && saved.DBPath != "" {
+		return saved.DBPath
+	}
+
+	dir, err := dialog.Directory().Title("ShellHub — Choose where to store your data").Browse()
+	if err != nil {
+		return "shellhub.db"
+	}
+
+	dbPath := filepath.Join(dir, "shellhub.db")
+	settings.Save(&settings.Settings{DBPath: dbPath})
+	return dbPath
+}
+
 func main() {
 	port := flag.Int("port", 8080, "server port")
-	dbPath := flag.String("db", "shellhub.db", "database file path")
+	dbFlag := flag.String("db", "shellhub.db", "database file path")
 	dev := flag.Bool("dev", false, "development mode (console, no tray)")
 	flag.Parse()
 
+	dbPath := resolveDBPath(*dbFlag, *dev)
+
 	if *dev {
-		// Dev mode: run with console output, no tray icon
 		fmt.Println()
 		fmt.Println("  ShellHub is running! (dev mode)")
 		fmt.Println()
 		fmt.Printf("  Open in browser:  http://localhost:%d\n", *port)
+		fmt.Printf("  Database:         %s\n", dbPath)
 		fmt.Println()
 		fmt.Println("  Press Ctrl+C to stop.")
 		fmt.Println()
 
-		if err := runServer(*port, *dbPath, true); err != nil {
+		if err := runServer(*port, dbPath, true); err != nil {
 			log.Fatal(err)
 		}
 	} else {
-		// Production mode: system tray icon, no console window
-		tray.Run(*port, *dbPath, runServer, openBrowser)
+		tray.Run(*port, dbPath, runServer, openBrowser)
 	}
 }

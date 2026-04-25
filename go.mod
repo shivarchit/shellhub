@@ -10,6 +10,7 @@ require (
 )
 
 require (
+	github.com/TheTitanrain/w32 v0.0.0-20180517000239-4f5cfb03fabf // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect
@@ -24,6 +25,7 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/sqweek/dialog v0.0.0-20260123140253-64c163d53aac // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
