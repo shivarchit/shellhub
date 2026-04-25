@@ -2,16 +2,28 @@ package tray
 
 import (
 	"bytes"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/png"
+	"runtime"
 )
 
-// GenerateIcon creates a 64x64 PNG icon for the system tray:
-// a rounded blue-to-indigo gradient square with a white terminal
-// prompt chevron (">") and underscore ("_").
+// GenerateIcon creates the system tray icon.
+// Returns ICO format on Windows, PNG on other platforms.
 func GenerateIcon() []byte {
-	const size = 64
+	img := generateImage(64)
+
+	if runtime.GOOS == "windows" {
+		return pngToICO(img)
+	}
+
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	return buf.Bytes()
+}
+
+func generateImage(size int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, size, size))
 
 	blue1 := color.RGBA{R: 59, G: 130, B: 246, A: 255}
@@ -19,7 +31,7 @@ func GenerateIcon() []byte {
 	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
 	transparent := color.RGBA{R: 0, G: 0, B: 0, A: 0}
 
-	radius := 12.0
+	radius := float64(size) / 5.0
 
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
@@ -35,26 +47,71 @@ func GenerateIcon() []byte {
 		}
 	}
 
-	// Draw ">" chevron — thick 3px lines
-	// Top arm: (12,16) → (30,31)
-	// Bottom arm: (12,46) → (30,31)
+	// ">" chevron — 3px thick
+	cx, cy := size*6/32, size*8/32
+	mx, my := size*16/32, size*16/32
+	bx, by := size*6/32, size*24/32
+
 	for w := -1; w <= 1; w++ {
-		drawLine(img, 12, 16+w, 30, 31+w, white, size, radius)
-		drawLine(img, 12, 46+w, 30, 31+w, white, size, radius)
+		drawLine(img, cx, cy+w, mx, my+w, white, size, radius)
+		drawLine(img, bx, by+w, mx, my+w, white, size, radius)
 	}
 
-	// Draw "_" underscore: thick bar from x=34 to x=52 at y=46, 3px tall
+	// "_" underscore — 3px tall
+	ux1, ux2, uy := size*18/32, size*26/32, size*24/32
 	for dy := -1; dy <= 1; dy++ {
-		for x := 34; x <= 52; x++ {
-			if inRoundedRect(x, 46+dy, size, size, radius) {
-				img.Set(x, 46+dy, white)
+		for x := ux1; x <= ux2; x++ {
+			if inRoundedRect(x, uy+dy, size, size, radius) {
+				img.Set(x, uy+dy, white)
 			}
 		}
 	}
 
-	var buf bytes.Buffer
-	_ = png.Encode(&buf, img)
-	return buf.Bytes()
+	return img
+}
+
+// pngToICO wraps a single PNG image in ICO container format.
+// Windows systray requires ICO format.
+func pngToICO(img *image.RGBA) []byte {
+	var pngBuf bytes.Buffer
+	_ = png.Encode(&pngBuf, img)
+	pngData := pngBuf.Bytes()
+
+	bounds := img.Bounds()
+	w := bounds.Dx()
+	h := bounds.Dy()
+
+	// ICO header: 6 bytes
+	// ICO dir entry: 16 bytes
+	// Then PNG data
+	var ico bytes.Buffer
+
+	// ICONDIR header
+	binary.Write(&ico, binary.LittleEndian, uint16(0))     // reserved
+	binary.Write(&ico, binary.LittleEndian, uint16(1))     // type: 1 = ICO
+	binary.Write(&ico, binary.LittleEndian, uint16(1))     // count: 1 image
+
+	// ICONDIRENTRY
+	icoW := uint8(w)
+	if w >= 256 {
+		icoW = 0
+	}
+	icoH := uint8(h)
+	if h >= 256 {
+		icoH = 0
+	}
+	ico.WriteByte(icoW)                                           // width
+	ico.WriteByte(icoH)                                           // height
+	ico.WriteByte(0)                                              // color palette
+	ico.WriteByte(0)                                              // reserved
+	binary.Write(&ico, binary.LittleEndian, uint16(1))            // color planes
+	binary.Write(&ico, binary.LittleEndian, uint16(32))           // bits per pixel
+	binary.Write(&ico, binary.LittleEndian, uint32(len(pngData))) // data size
+	binary.Write(&ico, binary.LittleEndian, uint32(22))           // data offset (6 + 16)
+
+	ico.Write(pngData)
+
+	return ico.Bytes()
 }
 
 func inRoundedRect(x, y, w, h int, r float64) bool {
@@ -68,7 +125,6 @@ func inRoundedRect(x, y, w, h int, r float64) bool {
 		return true
 	}
 
-	// Check corners
 	corners := [][2]float64{
 		{r, r},
 		{fw - r, r},
@@ -127,4 +183,3 @@ func abs(x int) int {
 	}
 	return x
 }
-
