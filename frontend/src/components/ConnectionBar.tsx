@@ -28,18 +28,24 @@ export default function ConnectionBar({
     <div className="flex items-center justify-between bg-surface-800 border-b border-border px-5 py-2.5">
       {/* Left section */}
       <div className="flex items-center gap-3">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
-        >
-          <Logo size={24} />
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
-            <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-          Dashboard
-        </button>
+        {connected ? (
+          <div className="flex items-center gap-2 text-sm text-text-muted">
+            <Logo size={24} />
+            <span className="font-semibold text-text-secondary">ShellHub</span>
+          </div>
+        ) : (
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <Logo size={24} />
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="shrink-0">
+              <path d="M10 12L6 8L10 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Back to Dashboard
+          </button>
+        )}
 
-        {/* Vertical divider */}
         <div className="w-px h-5 bg-border" />
 
         {/* Connection badge */}
@@ -80,12 +86,21 @@ export default function ConnectionBar({
 
       {/* Right section */}
       <div className="flex items-center">
-        <button
-          onClick={onDisconnect}
-          className="px-3 py-1.5 text-xs font-medium rounded-md bg-accent-red-bg text-accent-red border border-accent-red-dim hover:bg-accent-red-dim transition-colors"
-        >
-          Disconnect
-        </button>
+        {connected ? (
+          <button
+            onClick={onDisconnect}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-accent-red-bg text-accent-red border border-accent-red-dim hover:bg-accent-red-dim transition-colors"
+          >
+            Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={onBack}
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+          >
+            Back to Dashboard
+          </button>
+        )}
       </div>
     </div>
   )

@@ -28,12 +28,30 @@ export default function TerminalPage() {
   const [showPanel, setShowPanel] = useState(true)
   const [termSize, setTermSize] = useState({ cols: 80, rows: 24 })
   const [notFound, setNotFound] = useState(false)
+  const [showDisconnectModal, setShowDisconnectModal] = useState(false)
 
   const terminalRef = useRef<HTMLDivElement>(null)
   const xtermRef = useRef<XTerm | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const connectedRef = useRef(false)
+
+  // Block tab close / browser navigation while connected
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (connectedRef.current) {
+        e.preventDefault()
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [])
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    connectedRef.current = connected
+  }, [connected])
 
   // Main mount effect
   useEffect(() => {
@@ -41,7 +59,6 @@ export default function TerminalPage() {
 
     const serverId = Number(id)
 
-    // Fetch server info
     getServers().then((servers) => {
       const s = servers.find((sv) => sv.id === serverId)
       if (s) {
@@ -51,7 +68,6 @@ export default function TerminalPage() {
       }
     })
 
-    // Create xterm instance
     const term = new XTerm({
       cursorBlink: true,
       fontFamily: 'JetBrains Mono, Consolas, monospace',
@@ -73,18 +89,15 @@ export default function TerminalPage() {
       },
     })
 
-    // Load addons
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
 
-    // Open terminal in DOM
     if (terminalRef.current) {
       term.open(terminalRef.current)
       requestAnimationFrame(() => fitAddon.fit())
     }
 
-    // Create WebSocket
     const ws = createTerminalSocket(serverId)
     ws.binaryType = 'arraybuffer'
 
@@ -102,7 +115,9 @@ export default function TerminalPage() {
 
     ws.onclose = () => {
       setConnected(false)
+      if (timerRef.current) clearInterval(timerRef.current)
       term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n')
+      setShowDisconnectModal(true)
     }
 
     ws.onerror = () => {
@@ -120,16 +135,13 @@ export default function TerminalPage() {
       setTermSize({ cols, rows })
     })
 
-    // Store refs
     xtermRef.current = term
     wsRef.current = ws
     fitAddonRef.current = fitAddon
 
-    // Window resize handler
     const handleResize = () => fitAddon.fit()
     window.addEventListener('resize', handleResize)
 
-    // Cleanup
     return () => {
       window.removeEventListener('resize', handleResize)
       if (timerRef.current) clearInterval(timerRef.current)
@@ -144,24 +156,20 @@ export default function TerminalPage() {
     return () => clearTimeout(timeout)
   }, [showPanel])
 
-  // Paste text into terminal via WebSocket
   const handlePaste = useCallback((text: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(new TextEncoder().encode(text))
     }
   }, [])
 
-  // Disconnect handler
   const handleDisconnect = useCallback(() => {
     wsRef.current?.close()
   }, [])
 
-  // Back to dashboard
   const handleBack = useCallback(() => {
     navigate('/')
   }, [navigate])
 
-  // Server not found state
   if (notFound) {
     return (
       <div className="flex flex-col h-screen bg-surface-900 items-center justify-center gap-4">
@@ -191,14 +199,13 @@ export default function TerminalPage() {
       <div className="flex flex-1 min-h-0">
         {/* Terminal area */}
         <div className="flex-1 flex flex-col min-w-0">
-          {/* xterm container */}
           <div ref={terminalRef} className="flex-1 min-h-0 p-1" />
 
           {/* Status bar */}
           <div className="flex items-center justify-between bg-surface-800 border-t border-border px-4 py-1">
             <div className="flex items-center gap-3 text-xs font-mono text-text-muted">
               <span className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-accent-green" />
+                <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
                 SSH
               </span>
               {server && (
@@ -218,7 +225,7 @@ export default function TerminalPage() {
         </div>
 
         {/* Command panel */}
-        {showPanel && (
+        {showPanel && connected && (
           <CommandPanel
             server={server}
             onPasteToTerminal={handlePaste}
@@ -227,7 +234,7 @@ export default function TerminalPage() {
         )}
 
         {/* Panel toggle button when closed */}
-        {!showPanel && (
+        {!showPanel && connected && (
           <button
             onClick={() => setShowPanel(true)}
             className="absolute right-0 top-1/2 -translate-y-1/2 bg-surface-800 border border-border border-r-0 rounded-l-md px-1.5 py-3 text-text-muted hover:text-text-primary transition-colors"
@@ -245,6 +252,34 @@ export default function TerminalPage() {
           </button>
         )}
       </div>
+
+      {/* Disconnect modal */}
+      {showDisconnectModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-surface-800 border border-border rounded-xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
+            <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-accent-red-bg border border-accent-red-dim flex items-center justify-center">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M18 6L6 18M6 6l12 12" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">Session Ended</h3>
+            <p className="text-sm text-text-muted mb-2">
+              {server?.name && (
+                <span className="text-text-secondary font-medium">{server.name}</span>
+              )}
+            </p>
+            <p className="text-xs text-text-muted mb-6">
+              Session lasted {formatTime(elapsed)}
+            </p>
+            <button
+              onClick={handleBack}
+              className="w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+            >
+              Back to Dashboard
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
