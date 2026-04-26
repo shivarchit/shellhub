@@ -2,6 +2,9 @@ import { useState, useRef, useCallback } from 'react'
 import type { QuickCommand, ExecResult } from '../lib/types'
 import { execCommand } from '../lib/api'
 import { cn } from '../lib/utils'
+import { useToast } from '../lib/useToast'
+
+const DESTRUCTIVE_PATTERNS = [/rm\s+-rf/, /\bdrop\b/i, /\bdelete\b/i, /\btruncate\b/i, /mkfs/, /dd\s+if=/]
 
 interface CommandCardProps {
   command: QuickCommand
@@ -14,6 +17,7 @@ export default function CommandCard({
   serverId,
   onExecComplete,
 }: CommandCardProps) {
+  const { addToast } = useToast()
   const [status, setStatus] = useState<'idle' | 'running' | 'done' | 'failed'>(
     'idle'
   )
@@ -22,6 +26,15 @@ export default function CommandCard({
 
   const handleRun = useCallback(async () => {
     if (status === 'running') return
+
+    const isDestructive = DESTRUCTIVE_PATTERNS.some(p => p.test(command.command))
+    if (isDestructive) {
+      const confirmed = window.confirm(
+        `Warning: "${command.name}" contains a potentially destructive operation.\n\nCommand: ${command.command}\n\nAre you sure?`
+      )
+      if (!confirmed) return
+    }
+
     setStatus('running')
     const start = performance.now()
     try {
@@ -30,13 +43,16 @@ export default function CommandCard({
       setDuration(elapsed)
       if (result.exit_code === 0) {
         setStatus('done')
+        addToast(`${command.name} completed`, 'success')
       } else {
         setStatus('failed')
+        addToast(`${command.name} failed`, 'error')
       }
       onExecComplete(result, command)
     } catch {
       setDuration(Math.round(performance.now() - start))
       setStatus('failed')
+      addToast(`${command.name} failed`, 'error')
     }
 
     if (timerRef.current) clearTimeout(timerRef.current)
@@ -44,7 +60,7 @@ export default function CommandCard({
       setStatus('idle')
       setDuration(0)
     }, 3000)
-  }, [status, serverId, command, onExecComplete])
+  }, [status, serverId, command, onExecComplete, addToast])
 
   return (
     <div
