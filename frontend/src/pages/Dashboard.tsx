@@ -27,6 +27,7 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingServer, setEditingServer] = useState<Server | null>(null)
   const [execResult, setExecResult] = useState<ExecState | null>(null)
+  const [loading, setLoading] = useState(true)
 
   const pingAll = useCallback(async (serverList: Server[]) => {
     const results = await Promise.allSettled(
@@ -44,6 +45,7 @@ export default function Dashboard() {
     const list = await getServers()
     setServers(list)
     await pingAll(list)
+    setLoading(false)
   }, [pingAll])
 
   useEffect(() => {
@@ -120,7 +122,11 @@ export default function Dashboard() {
         onAdd={handleAdd}
       />
 
-      {selectedServer ? (
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : selectedServer ? (
         <ServerDetail
           server={selectedServer}
           online={onlineMap[selectedServer.id] ?? false}

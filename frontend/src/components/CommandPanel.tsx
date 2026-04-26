@@ -3,6 +3,8 @@ import type { Server, ExecResult } from '../lib/types'
 import { execCommand } from '../lib/api'
 import { cn } from '../lib/utils'
 
+const DESTRUCTIVE_PATTERNS = [/rm\s+-rf/, /\bdrop\b/i, /\bdelete\b/i, /\btruncate\b/i, /mkfs/, /dd\s+if=/]
+
 interface CommandPanelProps {
   server: Server | null
   onPasteToTerminal: (text: string) => void
@@ -27,6 +29,15 @@ export default function CommandPanel({
   const handleRun = useCallback(
     async (commandText: string, commandName: string, idx: number) => {
       if (!server || runningIdx !== null) return
+
+      const isDestructive = DESTRUCTIVE_PATTERNS.some(p => p.test(commandText))
+      if (isDestructive) {
+        const confirmed = window.confirm(
+          `Warning: "${commandName}" contains a potentially destructive operation.\n\nCommand: ${commandText}\n\nAre you sure?`
+        )
+        if (!confirmed) return
+      }
+
       setRunningIdx(idx)
       const start = performance.now()
       try {

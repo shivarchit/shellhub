@@ -22,6 +22,18 @@ export default function Sidebar({
 }: SidebarProps) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        searchRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return servers
@@ -73,8 +85,9 @@ export default function Sidebar({
       {/* Search */}
       <div className="px-3 py-3">
         <input
+          ref={searchRef}
           type="text"
-          placeholder="Search servers..."
+          placeholder="Search servers... (Ctrl+K)"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
