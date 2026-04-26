@@ -80,6 +80,7 @@ export default function AddEditServerModal({
         group,
         auth_type: authType,
         private_key: authType === 'key' ? privateKey : '',
+        sort_order: server?.sort_order ?? 0,
         quick_commands: commands.filter((c) => c.name && c.command),
       })
     } finally {
