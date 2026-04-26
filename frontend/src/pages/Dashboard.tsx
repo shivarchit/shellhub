@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Server, ExecResult, QuickCommand, ServerInput } from '../lib/types'
 import {
@@ -7,6 +7,7 @@ import {
   updateServer,
   deleteServer,
   pingServer,
+  getSettings,
 } from '../lib/api'
 import Sidebar from '../components/Sidebar'
 import ServerDetail from '../components/ServerDetail'
@@ -27,7 +28,9 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingServer, setEditingServer] = useState<Server | null>(null)
   const [execResult, setExecResult] = useState<ExecState | null>(null)
+  const [duplicateData, setDuplicateData] = useState<ServerInput | null>(null)
   const [loading, setLoading] = useState(true)
+  const [pingInterval, setPingInterval] = useState(30 * 60 * 1000)
 
   const pingAll = useCallback(async (serverList: Server[]) => {
     const results = await Promise.allSettled(
@@ -52,6 +55,39 @@ export default function Dashboard() {
     fetchServers()
   }, [fetchServers])
 
+  useEffect(() => {
+    getSettings()
+      .then((s) => {
+        const min = parseInt(s.ping_interval || '30', 10)
+        if (min > 0) setPingInterval(min * 60 * 1000)
+      })
+      .catch(() => {})
+  }, [])
+
+  const serversRef = useRef(servers)
+  useEffect(() => {
+    serversRef.current = servers
+  }, [servers])
+
+  useEffect(() => {
+    if (pingInterval <= 0) return
+    const id = setInterval(() => {
+      const currentServers = serversRef.current
+      if (currentServers.length === 0) return
+      Promise.allSettled(currentServers.map((s) => pingServer(s.id))).then(
+        (results) => {
+          const map: Record<number, boolean> = {}
+          currentServers.forEach((s, i) => {
+            const r = results[i]
+            map[s.id] = r.status === 'fulfilled' && r.value.online
+          })
+          setOnlineMap(map)
+        }
+      )
+    }, pingInterval)
+    return () => clearInterval(id)
+  }, [pingInterval])
+
   const selectedServer = servers.find((s) => s.id === selectedId) ?? null
 
   const handleSelect = (id: number) => {
@@ -66,6 +102,22 @@ export default function Dashboard() {
     if (selectedServer) {
       setEditingServer(selectedServer)
     }
+  }
+
+  const handleDuplicate = () => {
+    const srv = servers.find((s) => s.id === selectedId)
+    if (!srv) return
+    setEditingServer(null)
+    setDuplicateData({
+      name: `${srv.name} (Copy)`,
+      host: srv.host,
+      port: srv.port,
+      username: srv.username,
+      password: srv.password,
+      group: srv.group,
+      quick_commands: srv.quick_commands ?? [],
+    })
+    setShowAddModal(true)
   }
 
   const handleDelete = async () => {
@@ -89,6 +141,7 @@ export default function Dashboard() {
     }
     setShowAddModal(false)
     setEditingServer(null)
+    setDuplicateData(null)
     await fetchServers()
   }
 
@@ -132,6 +185,7 @@ export default function Dashboard() {
           online={onlineMap[selectedServer.id] ?? false}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onDuplicate={handleDuplicate}
           onOpenTerminal={handleOpenTerminal}
           onExecComplete={handleExecComplete}
         />
@@ -158,10 +212,12 @@ export default function Dashboard() {
       {(showAddModal || editingServer) && (
         <AddEditServerModal
           server={editingServer}
+          initialData={duplicateData ?? undefined}
           onSave={handleSave}
           onClose={() => {
             setShowAddModal(false)
             setEditingServer(null)
+            setDuplicateData(null)
           }}
         />
       )}
