@@ -25,6 +25,8 @@ type Server struct {
 	Username      string         `yaml:"username" json:"username" db:"username"`
 	Password      string         `yaml:"password" json:"password" db:"password"`
 	Group         string         `yaml:"group" json:"group" db:"group"`
+	AuthType      string         `yaml:"auth_type" json:"auth_type" db:"auth_type"`
+	PrivateKey    string         `yaml:"private_key" json:"private_key" db:"private_key"`
 	QuickCommands []QuickCommand `yaml:"quick_commands" json:"quick_commands"`
 }
 
@@ -86,7 +88,12 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
-	return &Store{db: db}, nil
+	// Add new columns for key-based auth (harmlessly errors if columns already exist)
+	s := &Store{db: db}
+	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
+	s.db.Exec(`ALTER TABLE servers ADD COLUMN private_key TEXT NOT NULL DEFAULT ''`)
+
+	return s, nil
 }
 
 func (s *Store) Close() error {
@@ -94,7 +101,7 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) GetServers() ([]Server, error) {
-	rows, err := s.db.Query(`SELECT id, name, host, port, username, password, "group" FROM servers ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id, name, host, port, username, password, "group", auth_type, private_key FROM servers ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +110,7 @@ func (s *Store) GetServers() ([]Server, error) {
 	var servers []Server
 	for rows.Next() {
 		var srv Server
-		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group); err != nil {
+		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey); err != nil {
 			return nil, err
 		}
 		cmds, err := s.getQuickCommands(srv.ID)
@@ -121,8 +128,8 @@ func (s *Store) GetServers() ([]Server, error) {
 
 func (s *Store) GetServer(id int) (*Server, error) {
 	var srv Server
-	err := s.db.QueryRow(`SELECT id, name, host, port, username, password, "group" FROM servers WHERE id = ?`, id).
-		Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group)
+	err := s.db.QueryRow(`SELECT id, name, host, port, username, password, "group", auth_type, private_key FROM servers WHERE id = ?`, id).
+		Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -142,8 +149,8 @@ func (s *Store) AddServer(srv Server) (int, error) {
 		srv.Port = 22
 	}
 	res, err := s.db.Exec(
-		`INSERT INTO servers (name, host, port, username, password, "group") VALUES (?, ?, ?, ?, ?, ?)`,
-		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group,
+		`INSERT INTO servers (name, host, port, username, password, "group", auth_type, private_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, srv.AuthType, srv.PrivateKey,
 	)
 	if err != nil {
 		return 0, err
@@ -183,8 +190,8 @@ func (s *Store) UpdateServer(id int, srv Server) error {
 	}
 
 	if _, err := tx.Exec(
-		`UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password = ?, "group" = ? WHERE id = ?`,
-		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, id,
+		`UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password = ?, "group" = ?, auth_type = ?, private_key = ? WHERE id = ?`,
+		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, srv.AuthType, srv.PrivateKey, id,
 	); err != nil {
 		return err
 	}

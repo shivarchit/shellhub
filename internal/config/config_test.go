@@ -304,6 +304,42 @@ func TestSettings_GetAll(t *testing.T) {
 	}
 }
 
+func TestAddServer_WithKeyAuth(t *testing.T) {
+	s := tempStore(t)
+	id, err := s.AddServer(Server{
+		Name: "KeyServer", Host: "1.2.3.4", Port: 22,
+		Username: "u", AuthType: "key", PrivateKey: "fake-key-data", Group: "Test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := s.GetServer(id)
+	if srv.AuthType != "key" {
+		t.Fatalf("expected 'key', got %q", srv.AuthType)
+	}
+	if srv.PrivateKey != "fake-key-data" {
+		t.Fatalf("private key not saved")
+	}
+}
+
+func TestAddServer_DefaultAuthType(t *testing.T) {
+	s := tempStore(t)
+	id, err := s.AddServer(Server{
+		Name: "PassServer", Host: "1.2.3.4", Port: 22,
+		Username: "u", Password: "p", Group: "Test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := s.GetServer(id)
+	// AuthType should be empty string (zero value) since we didn't set it;
+	// the DB default is 'password' but since we INSERT the Go zero value (""),
+	// it will be "". This verifies the field round-trips correctly.
+	if srv.AuthType != "" {
+		t.Fatalf("expected empty auth_type for default, got %q", srv.AuthType)
+	}
+}
+
 func TestImportFromYAML_AlreadyHasData(t *testing.T) {
 	s := tempStoreWithData(t) // already has 1 server
 

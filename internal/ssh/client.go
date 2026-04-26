@@ -48,11 +48,22 @@ func (c *Client) Execute(server config.Server, command string) (string, int, err
 }
 
 func (c *Client) Connect(server config.Server) (*gossh.Client, error) {
+	var authMethods []gossh.AuthMethod
+
+	switch server.AuthType {
+	case "key":
+		signer, err := gossh.ParsePrivateKey([]byte(server.PrivateKey))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+		authMethods = append(authMethods, gossh.PublicKeys(signer))
+	default:
+		authMethods = append(authMethods, gossh.Password(server.Password))
+	}
+
 	cfg := &gossh.ClientConfig{
-		User: server.Username,
-		Auth: []gossh.AuthMethod{
-			gossh.Password(server.Password),
-		},
+		User:            server.Username,
+		Auth:            authMethods,
 		HostKeyCallback: gossh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
