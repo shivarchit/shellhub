@@ -35,6 +35,9 @@ export const execCommand = (id: number, command: string) =>
     body: JSON.stringify({ command }),
   })
 
+export const pingHost = (host: string, port: number) =>
+  request<PingResult>('/ping', { method: 'POST', body: JSON.stringify({ host, port }) })
+
 export const getSettings = () => request<Record<string, string>>('/settings')
 
 export const updateSettings = (settings: Record<string, string>) =>

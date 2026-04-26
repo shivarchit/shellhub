@@ -161,8 +161,8 @@ export default function AddEditServerModal({
               />
             </div>
 
-            {/* Host + Port */}
-            <div className="flex gap-3">
+            {/* Host + Port + Test */}
+            <div className="flex gap-3 items-end">
               <div className="flex-1">
                 <label className="block text-xs font-medium text-text-secondary mb-1">
                   Host
@@ -187,6 +187,26 @@ export default function AddEditServerModal({
                   onChange={(e) => setPort(Number(e.target.value))}
                   className={inputClass}
                 />
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testing || !host}
+                  className="px-3 py-2 text-xs font-medium text-text-secondary bg-surface-700 border border-border rounded-md hover:bg-surface-600 transition-colors disabled:opacity-50 whitespace-nowrap"
+                >
+                  {testing ? 'Testing...' : 'Test Connection'}
+                </button>
+                {testResult !== null && (
+                  <span
+                    className={cn(
+                      'text-sm font-bold',
+                      testResult ? 'text-accent-green' : 'text-accent-red'
+                    )}
+                  >
+                    {testResult ? '✓' : '✗'}
+                  </span>
+                )}
               </div>
             </div>
 

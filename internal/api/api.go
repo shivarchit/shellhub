@@ -35,6 +35,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/servers/{id}", h.deleteServer)
 	mux.HandleFunc("POST /api/servers/{id}/ping", h.pingServer)
 	mux.HandleFunc("POST /api/servers/{id}/exec", h.execCommand)
+	mux.HandleFunc("POST /api/ping", h.pingHost)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
 }
@@ -101,6 +102,22 @@ func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(204)
+}
+
+func (h *Handler) pingHost(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Host string `json:"host"`
+		Port int    `json:"port"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if body.Port == 0 {
+		body.Port = 22
+	}
+	online, _ := h.pinger.Ping(body.Host, body.Port, 5*time.Second)
+	writeJSON(w, 200, map[string]bool{"online": online})
 }
 
 func (h *Handler) pingServer(w http.ResponseWriter, r *http.Request) {

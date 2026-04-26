@@ -154,6 +154,24 @@ func TestDeleteServer_IDsDoNotShift(t *testing.T) {
 	}
 }
 
+func TestPingHost(t *testing.T) {
+	_, mux := setupHandler(t)
+	body := `{"host":"1.1.1.1","port":22}`
+	req := httptest.NewRequest("POST", "/api/ping", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var result map[string]bool
+	json.Unmarshal(rec.Body.Bytes(), &result)
+	// Mock pinger always returns true
+	if !result["online"] {
+		t.Fatal("expected online=true from mock")
+	}
+}
+
 func TestPingServer(t *testing.T) {
 	_, mux := setupHandler(t)
 	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
