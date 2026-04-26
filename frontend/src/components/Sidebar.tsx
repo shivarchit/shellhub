@@ -2,8 +2,24 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Server } from '../lib/types'
 import { cn } from '../lib/utils'
+import { reorderServers } from '../lib/api'
 import StatusDot from './StatusDot'
 import Logo from './Logo'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface SidebarProps {
   servers: Server[]
@@ -11,6 +27,83 @@ interface SidebarProps {
   onlineMap: Record<number, boolean>
   onSelect: (id: number) => void
   onAdd: () => void
+  onReorder: () => void
+}
+
+function SortableServerItem({
+  server,
+  isSelected,
+  isOnline,
+  selectedId,
+  onSelect,
+}: {
+  server: Server
+  isSelected: boolean
+  isOnline: boolean
+  selectedId: number | null
+  onSelect: (id: number) => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: server.id })
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  }
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <div className="flex items-center">
+        <button
+          {...listeners}
+          className="px-1 cursor-grab text-text-dimmed hover:text-text-muted flex-shrink-0"
+          tabIndex={-1}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 12 12"
+            fill="currentColor"
+          >
+            <circle cx="4" cy="2" r="1" />
+            <circle cx="8" cy="2" r="1" />
+            <circle cx="4" cy="6" r="1" />
+            <circle cx="8" cy="6" r="1" />
+            <circle cx="4" cy="10" r="1" />
+            <circle cx="8" cy="10" r="1" />
+          </svg>
+        </button>
+        <button
+          onClick={() => onSelect(server.id)}
+          className={cn(
+            'flex-1 text-left px-3 py-2 rounded-lg mb-0.5 transition-all duration-200 group',
+            isSelected
+              ? cn(
+                  'bg-surface-700/60 border-l-2',
+                  isOnline
+                    ? 'border-l-accent-green shadow-glow-green'
+                    : 'border-l-accent-red shadow-glow-red'
+                )
+              : cn(
+                  'border-l-2 border-l-transparent hover:bg-surface-700/40',
+                  selectedId !== null
+                    ? 'opacity-30 hover:opacity-100'
+                    : 'opacity-100'
+                )
+          )}
+        >
+          <div className="flex items-center gap-2">
+            <StatusDot online={isOnline} size="sm" />
+            <span className="text-sm font-medium text-text-primary truncate">
+              {server.name}
+            </span>
+          </div>
+          <div className="text-xs text-text-muted mt-0.5 pl-4 truncate font-mono">
+            {server.host}:{server.port}
+          </div>
+        </button>
+      </div>
+    </div>
+  )
 }
 
 export default function Sidebar({
@@ -19,10 +112,17 @@ export default function Sidebar({
   onlineMap,
   onSelect,
   onAdd,
+  onReorder,
 }: SidebarProps) {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  )
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -55,6 +155,44 @@ export default function Sidebar({
     }
     return map
   }, [filtered])
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    // Find which group both items belong to
+    let targetGroup: string | null = null
+    let groupServers: Server[] = []
+    for (const [group, gServers] of grouped.entries()) {
+      const hasActive = gServers.some((s) => s.id === active.id)
+      const hasOver = gServers.some((s) => s.id === over.id)
+      if (hasActive && hasOver) {
+        targetGroup = group
+        groupServers = gServers
+        break
+      }
+    }
+    if (!targetGroup) return
+
+    const oldIndex = groupServers.findIndex((s) => s.id === active.id)
+    const newIndex = groupServers.findIndex((s) => s.id === over.id)
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const reordered = arrayMove(groupServers, oldIndex, newIndex)
+
+    // Compute new sort_order values for all servers in this group
+    const orders = reordered.map((s, i) => ({
+      id: s.id,
+      sort_order: i,
+    }))
+
+    try {
+      await reorderServers(orders)
+      onReorder()
+    } catch {
+      // silently fail
+    }
+  }
 
   return (
     <aside className="flex flex-col w-64 h-full bg-surface-800 border-r border-border">
@@ -106,42 +244,31 @@ export default function Sidebar({
                 {groupServers.length}
               </span>
             </div>
-            {groupServers.map((server) => {
-              const isSelected = selectedId === server.id
-              const isOnline = onlineMap[server.id] ?? false
-              return (
-                <button
-                  key={server.id}
-                  onClick={() => onSelect(server.id)}
-                  className={cn(
-                    'w-full text-left px-3 py-2 rounded-lg mb-0.5 transition-all duration-200 group',
-                    isSelected
-                      ? cn(
-                          'bg-surface-700/60 border-l-2',
-                          isOnline
-                            ? 'border-l-accent-green shadow-glow-green'
-                            : 'border-l-accent-red shadow-glow-red'
-                        )
-                      : cn(
-                          'border-l-2 border-l-transparent hover:bg-surface-700/40',
-                          selectedId !== null
-                            ? 'opacity-30 hover:opacity-100'
-                            : 'opacity-100'
-                        )
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <StatusDot online={isOnline} size="sm" />
-                    <span className="text-sm font-medium text-text-primary truncate">
-                      {server.name}
-                    </span>
-                  </div>
-                  <div className="text-xs text-text-muted mt-0.5 pl-4 truncate font-mono">
-                    {server.host}:{server.port}
-                  </div>
-                </button>
-              )
-            })}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={groupServers.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                {groupServers.map((server) => {
+                  const isSelected = selectedId === server.id
+                  const isOnline = onlineMap[server.id] ?? false
+                  return (
+                    <SortableServerItem
+                      key={server.id}
+                      server={server}
+                      isSelected={isSelected}
+                      isOnline={isOnline}
+                      selectedId={selectedId}
+                      onSelect={onSelect}
+                    />
+                  )
+                })}
+              </SortableContext>
+            </DndContext>
           </div>
         ))}
         {filtered.length === 0 && (

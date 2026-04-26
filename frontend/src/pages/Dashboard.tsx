@@ -115,6 +115,9 @@ export default function Dashboard() {
       username: srv.username,
       password: srv.password,
       group: srv.group,
+      auth_type: srv.auth_type,
+      private_key: srv.private_key,
+      sort_order: 0,
       quick_commands: srv.quick_commands ?? [],
     })
     setShowAddModal(true)
@@ -173,6 +176,7 @@ export default function Dashboard() {
         onlineMap={onlineMap}
         onSelect={handleSelect}
         onAdd={handleAdd}
+        onReorder={fetchServers}
       />
 
       {loading ? (
