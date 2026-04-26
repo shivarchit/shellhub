@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
 import type { Server, ServerInput, QuickCommand } from '../lib/types'
+import { pingHost } from '../lib/api'
+import { cn } from '../lib/utils'
 
 interface AddEditServerModalProps {
   server: Server | null
+  initialData?: ServerInput
   onSave: (s: ServerInput) => Promise<void>
   onClose: () => void
 }
@@ -13,6 +16,7 @@ function emptyCommand(): QuickCommand {
 
 export default function AddEditServerModal({
   server,
+  initialData,
   onSave,
   onClose,
 }: AddEditServerModalProps) {
@@ -22,8 +26,12 @@ export default function AddEditServerModal({
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [group, setGroup] = useState('')
+  const [authType, setAuthType] = useState<'password' | 'key'>('password')
+  const [privateKey, setPrivateKey] = useState('')
   const [commands, setCommands] = useState<QuickCommand[]>([])
   const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<boolean | null>(null)
 
   useEffect(() => {
     if (server) {
@@ -33,7 +41,19 @@ export default function AddEditServerModal({
       setUsername(server.username)
       setPassword(server.password)
       setGroup(server.group)
+      setAuthType(server.auth_type || 'password')
+      setPrivateKey(server.private_key || '')
       setCommands(server.quick_commands?.length ? [...server.quick_commands] : [])
+    } else if (initialData) {
+      setName(initialData.name)
+      setHost(initialData.host)
+      setPort(initialData.port)
+      setUsername(initialData.username)
+      setPassword(initialData.password)
+      setGroup(initialData.group)
+      setAuthType(initialData.auth_type || 'password')
+      setPrivateKey(initialData.private_key || '')
+      setCommands(initialData.quick_commands?.length ? [...initialData.quick_commands] : [])
     } else {
       setName('')
       setHost('')
@@ -41,9 +61,11 @@ export default function AddEditServerModal({
       setUsername('')
       setPassword('')
       setGroup('')
+      setAuthType('password')
+      setPrivateKey('')
       setCommands([])
     }
-  }, [server])
+  }, [server, initialData])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,6 +78,8 @@ export default function AddEditServerModal({
         username,
         password,
         group,
+        auth_type: authType,
+        private_key: authType === 'key' ? privateKey : '',
         quick_commands: commands.filter((c) => c.name && c.command),
       })
     } finally {
@@ -75,6 +99,19 @@ export default function AddEditServerModal({
 
   const removeCommand = (index: number) => {
     setCommands((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleTestConnection = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await pingHost(host, port || 22)
+      setTestResult(result.online)
+    } catch {
+      setTestResult(false)
+    } finally {
+      setTesting(false)
+    }
   }
 
   const inputClass =
@@ -168,20 +205,68 @@ export default function AddEditServerModal({
               />
             </div>
 
-            {/* Password */}
+            {/* Auth Type Toggle */}
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">
-                Password
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Authentication
               </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="********"
-                className={inputClass}
-              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAuthType('password')}
+                  className={cn(
+                    'flex-1 py-1.5 text-xs rounded-md border transition-colors',
+                    authType === 'password'
+                      ? 'bg-accent-blue text-white border-accent-blue'
+                      : 'bg-surface-900 text-text-muted border-border'
+                  )}
+                >
+                  Password
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAuthType('key')}
+                  className={cn(
+                    'flex-1 py-1.5 text-xs rounded-md border transition-colors',
+                    authType === 'key'
+                      ? 'bg-accent-blue text-white border-accent-blue'
+                      : 'bg-surface-900 text-text-muted border-border'
+                  )}
+                >
+                  SSH Key
+                </button>
+              </div>
             </div>
+
+            {authType === 'password' ? (
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="********"
+                  className={inputClass}
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">
+                  Private Key (PEM)
+                </label>
+                <textarea
+                  value={privateKey}
+                  onChange={(e) => setPrivateKey(e.target.value)}
+                  rows={6}
+                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                  className={`${inputClass} font-mono text-xs`}
+                  required
+                />
+              </div>
+            )}
 
             {/* Group */}
             <div>

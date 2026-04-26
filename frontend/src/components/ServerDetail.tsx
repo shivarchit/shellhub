@@ -8,6 +8,7 @@ interface ServerDetailProps {
   online: boolean
   onEdit: () => void
   onDelete: () => void
+  onDuplicate: () => void
   onOpenTerminal: () => void
   onExecComplete: (result: ExecResult, command: QuickCommand) => void
 }
@@ -17,6 +18,7 @@ export default function ServerDetail({
   online,
   onEdit,
   onDelete,
+  onDuplicate,
   onOpenTerminal,
   onExecComplete,
 }: ServerDetailProps) {
@@ -66,6 +68,12 @@ export default function ServerDetail({
             Edit
           </button>
           <button
+            onClick={onDuplicate}
+            className="px-4 py-2 text-sm font-medium text-text-secondary bg-surface-700 border border-border rounded-lg hover:bg-surface-600 transition-colors"
+          >
+            Duplicate
+          </button>
+          <button
             onClick={handleDelete}
             className="px-4 py-2 text-sm font-medium text-accent-red bg-accent-red-bg border border-accent-red/20 rounded-lg hover:bg-accent-red-dim transition-colors"
           >
@@ -75,11 +83,12 @@ export default function ServerDetail({
       </div>
 
       {/* Info grid */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-5 gap-4 mb-8">
         {[
           { label: 'Host', value: server.host },
           { label: 'Port', value: String(server.port) },
           { label: 'Username', value: server.username },
+          { label: 'Auth', value: server.auth_type === 'key' ? 'SSH Key' : 'Password' },
           {
             label: 'Commands',
             value: String(server.quick_commands?.length ?? 0),

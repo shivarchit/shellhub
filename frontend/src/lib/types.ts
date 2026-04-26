@@ -12,6 +12,8 @@ export interface Server {
   username: string
   password: string
   group: string
+  auth_type: 'password' | 'key'
+  private_key: string
   quick_commands: QuickCommand[]
 }
 
