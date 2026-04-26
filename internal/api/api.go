@@ -35,6 +35,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/servers/{id}", h.deleteServer)
 	mux.HandleFunc("POST /api/servers/{id}/ping", h.pingServer)
 	mux.HandleFunc("POST /api/servers/{id}/exec", h.execCommand)
+	mux.HandleFunc("GET /api/settings", h.getSettings)
+	mux.HandleFunc("PUT /api/settings", h.updateSettings)
 }
 
 func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +150,31 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode})
+}
+
+func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
+	settings, err := h.store.GetAllSettings()
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, settings)
+}
+
+func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
+	var body map[string]string
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	for key, value := range body {
+		if err := h.store.SetSetting(key, value); err != nil {
+			writeError(w, 500, err.Error())
+			return
+		}
+	}
+	settings, _ := h.store.GetAllSettings()
+	writeJSON(w, 200, settings)
 }
 
 func parseID(r *http.Request) (int, error) {

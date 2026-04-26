@@ -197,3 +197,34 @@ func TestExecCommand(t *testing.T) {
 		t.Fatalf("unexpected output: %v", result["output"])
 	}
 }
+
+func TestGetSettings_Empty(t *testing.T) {
+	_, mux := setupHandler(t)
+	req := httptest.NewRequest("GET", "/api/settings", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestUpdateAndGetSettings(t *testing.T) {
+	_, mux := setupHandler(t)
+	body := `{"ping_interval":"30"}`
+	req := httptest.NewRequest("PUT", "/api/settings", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("update: expected 200, got %d", rec.Code)
+	}
+
+	req = httptest.NewRequest("GET", "/api/settings", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var settings map[string]string
+	json.Unmarshal(rec.Body.Bytes(), &settings)
+	if settings["ping_interval"] != "30" {
+		t.Fatalf("expected '30', got %q", settings["ping_interval"])
+	}
+}

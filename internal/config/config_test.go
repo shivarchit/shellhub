@@ -256,6 +256,54 @@ func TestImportFromYAML_NoFile(t *testing.T) {
 	}
 }
 
+func TestSettings_GetEmpty(t *testing.T) {
+	s := tempStore(t)
+	val, err := s.GetSetting("ping_interval")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if val != "" {
+		t.Fatalf("expected empty, got %q", val)
+	}
+}
+
+func TestSettings_SetAndGet(t *testing.T) {
+	s := tempStore(t)
+	if err := s.SetSetting("ping_interval", "30"); err != nil {
+		t.Fatal(err)
+	}
+	val, err := s.GetSetting("ping_interval")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if val != "30" {
+		t.Fatalf("expected '30', got %q", val)
+	}
+}
+
+func TestSettings_Upsert(t *testing.T) {
+	s := tempStore(t)
+	s.SetSetting("ping_interval", "30")
+	s.SetSetting("ping_interval", "60")
+	val, _ := s.GetSetting("ping_interval")
+	if val != "60" {
+		t.Fatalf("expected '60', got %q", val)
+	}
+}
+
+func TestSettings_GetAll(t *testing.T) {
+	s := tempStore(t)
+	s.SetSetting("ping_interval", "30")
+	s.SetSetting("theme", "dark")
+	all, err := s.GetAllSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("expected 2, got %d", len(all))
+	}
+}
+
 func TestImportFromYAML_AlreadyHasData(t *testing.T) {
 	s := tempStoreWithData(t) // already has 1 server
 
