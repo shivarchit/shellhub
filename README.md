@@ -10,10 +10,19 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Interactive Terminal** — full xterm.js terminal in the browser with color support, resize, and tab completion
 - **Quick Commands** — save named commands per server (flush cache, restart service, tail logs) and run them with one click
 - **Command Execution** — run quick commands from the dashboard without opening a full terminal session, see output in a modal
+- **SSH Key Auth** — supports both password and private key authentication
 - **System Tray App** — runs in the system tray with no console window. Right-click for "Open in Browser" and "Stop Server"
 - **Single Binary** — Go embeds the entire React frontend, deploy one file and you're done
 - **SQLite Storage** — servers and commands stored in a local SQLite database, managed entirely from the web UI
 - **YAML Import** — optionally bootstrap from a `servers.yaml` file on first run
+- **Drag & Drop** — reorder servers within groups by dragging
+- **Export / Import** — backup and restore your server configs as JSON
+- **Execution History** — tracks all command runs with output, exit codes, and timestamps
+- **Audit Log** — logs all significant actions (server CRUD, terminal sessions, command runs)
+- **Auto-Refresh** — configurable ping interval to keep server status up to date
+- **Toast Notifications** — real-time feedback when commands complete
+- **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
+- **Keyboard Shortcuts** — `Ctrl+K` to focus server search
 
 ## Quick Start
 
@@ -32,9 +41,8 @@ Add servers from the browser. Everything is stored in `shellhub.db` in the folde
 your-chosen-folder/
 └── shellhub.db      ← auto-created, stores all server configs
 
-next-to-exe/
-├── shellhub.exe
-└── shellhub-settings.json   ← remembers your chosen DB location
+%APPDATA%/ShellHub/  (Windows) or ~/.config/shellhub/ (Linux/macOS)
+└── settings.json    ← remembers your chosen DB location
 ```
 
 ### Import from YAML (optional)
@@ -79,7 +87,7 @@ Open `http://localhost:5173` for the frontend with hot reload.
 
 ## Storage
 
-On first launch, ShellHub asks you to pick a folder for the database. The choice is saved to `shellhub-settings.json` next to the exe and remembered on restart.
+On first launch, ShellHub asks you to pick a folder for the database. The choice is saved to `settings.json` in your OS config directory (`%APPDATA%\ShellHub` on Windows, `~/.config/shellhub` on Linux/macOS) and remembered on restart.
 
 You can override the DB location with the `-db` flag:
 
@@ -99,6 +107,8 @@ servers:
     username: "admin"
     password: "changeme"
     group: "Production"
+    auth_type: "password"          # or "key" for SSH key auth
+    private_key: ""                # PEM-encoded private key (when auth_type is "key")
     quick_commands:
       - name: "Flush Cache"
         command: "sudo /opt/aem/crx-quickstart/bin/flush-cache.sh"
@@ -110,7 +120,16 @@ servers:
 
 See `servers.example.yaml` for a full example with multiple servers.
 
-> **Note:** `servers.yaml`, `shellhub.db`, and `shellhub-settings.json` contain credentials and are gitignored.
+> **Note:** `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
+
+## Settings
+
+Access settings via the gear icon in the sidebar or navigate to `/settings`.
+
+- **Ping Interval** — how often to check server online/offline status (default: 30 minutes)
+- **Export** — download all servers and settings as a JSON file
+- **Import** — upload a JSON backup to merge or replace existing data
+- **Audit Log** — view all actions (server changes, terminal sessions, command executions)
 
 ## Cross-Platform Builds
 
@@ -156,9 +175,9 @@ Cross-platform binaries land in `build/dist/`. Each is a self-contained single f
 
 ## Tech Stack
 
-**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray
+**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray, sqweek/dialog
 
-**Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, React Router
+**Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, React Router, @dnd-kit
 
 ## Project Structure
 
@@ -171,15 +190,15 @@ shellhub/
 │   ├── Makefile            # Make build script (Linux/macOS)
 │   └── dist/               # Cross-platform binaries (gitignored)
 ├── internal/
-│   ├── config/             # SQLite store + YAML import
+│   ├── config/             # SQLite store (servers, settings, history, audit)
 │   ├── settings/           # Persisted app settings (DB path)
-│   ├── ssh/                # SSH client + interactive session
+│   ├── ssh/                # SSH client (password + key auth)
 │   ├── api/                # REST API handlers
 │   ├── terminal/           # WebSocket ↔ SSH bridge
 │   └── tray/               # System tray icon + menu
 └── frontend/
     └── src/
-        ├── pages/          # Dashboard, Terminal
-        ├── components/     # Sidebar, CommandCard, ExecModal, etc.
-        └── lib/            # API client, types, WebSocket helpers
+        ├── pages/          # Dashboard, Terminal, Settings
+        ├── components/     # Sidebar, CommandCard, ExecModal, ToastProvider, etc.
+        └── lib/            # API client, types, WebSocket helpers, hooks
 ```
