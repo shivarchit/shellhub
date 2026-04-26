@@ -34,3 +34,11 @@ export const execCommand = (id: number, command: string) =>
     method: 'POST',
     body: JSON.stringify({ command }),
   })
+
+export const getSettings = () => request<Record<string, string>>('/settings')
+
+export const updateSettings = (settings: Record<string, string>) =>
+  request<Record<string, string>>('/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  })

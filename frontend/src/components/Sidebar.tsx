@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Server } from '../lib/types'
 import { cn } from '../lib/utils'
 import StatusDot from './StatusDot'
@@ -19,6 +20,7 @@ export default function Sidebar({
   onSelect,
   onAdd,
 }: SidebarProps) {
+  const navigate = useNavigate()
   const [search, setSearch] = useState('')
 
   const filtered = useMemo(() => {
@@ -45,11 +47,27 @@ export default function Sidebar({
   return (
     <aside className="flex flex-col w-64 h-full bg-surface-800 border-r border-border">
       {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-4 border-b border-border">
-        <Logo size={32} />
-        <span className="text-text-primary font-semibold text-lg tracking-tight">
-          ShellHub
-        </span>
+      <div className="flex items-center justify-between px-4 py-4 border-b border-border">
+        <div className="flex items-center gap-2.5">
+          <Logo size={32} />
+          <span className="text-text-primary font-semibold text-lg tracking-tight">
+            ShellHub
+          </span>
+        </div>
+        <button
+          onClick={() => navigate('/settings')}
+          className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-700 transition-colors"
+          title="Settings"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path
+              d="M6.5 1.5L6.1 3.2a5 5 0 00-1.3.8L3.2 3.4l-1.5 2.6 1.5 1.2a5 5 0 000 1.6l-1.5 1.2 1.5 2.6 1.6-.6a5 5 0 001.3.8l.4 1.7h3l.4-1.7a5 5 0 001.3-.8l1.6.6 1.5-2.6-1.5-1.2a5 5 0 000-1.6l1.5-1.2-1.5-2.6-1.6.6a5 5 0 00-1.3-.8L9.5 1.5h-3zM8 5.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z"
+              stroke="currentColor"
+              strokeWidth="1"
+              fill="none"
+            />
+          </svg>
+        </button>
       </div>
 
       {/* Search */}
