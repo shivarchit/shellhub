@@ -36,3 +36,22 @@ export interface ConnectionRecord {
   disconnected_at: string | null
   duration_seconds: number
 }
+
+export interface ExecRecord {
+  id: number
+  server_id: number
+  command_name: string
+  command_text: string
+  output: string
+  exit_code: number
+  executed_at: string
+  duration_ms: number
+}
+
+export interface AuditEntry {
+  id: number
+  action: string
+  server_id: number | null
+  details: string
+  created_at: string
+}

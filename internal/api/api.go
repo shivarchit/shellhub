@@ -38,6 +38,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/servers/{id}/exec", h.execCommand)
 	mux.HandleFunc("POST /api/ping", h.pingHost)
 	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
+	mux.HandleFunc("GET /api/servers/{id}/exec-history", h.getExecHistory)
+	mux.HandleFunc("GET /api/audit-log", h.getAuditLog)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
 	mux.HandleFunc("GET /api/export", h.exportData)
@@ -64,6 +66,7 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	h.store.LogAudit("server_create", &id, srv.Name)
 	created, _ := h.store.GetServer(id)
 	writeJSON(w, 201, created)
 }
@@ -87,6 +90,7 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	h.store.LogAudit("server_update", &id, srv.Name)
 	updated, _ := h.store.GetServer(id)
 	writeJSON(w, 200, updated)
 }
@@ -105,6 +109,7 @@ func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	h.store.LogAudit("server_delete", &id, "")
 	w.WriteHeader(204)
 }
 
@@ -183,6 +188,15 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	h.store.LogExec(config.ExecRecord{
+		ServerID:    id,
+		CommandName: body.Command,
+		CommandText: body.Command,
+		Output:      output,
+		ExitCode:    exitCode,
+		DurationMs:  0,
+	})
+	h.store.LogAudit("command_exec", &id, body.Command)
 	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode})
 }
 
@@ -280,6 +294,47 @@ func (h *Handler) getConnectionHistory(w http.ResponseWriter, r *http.Request) {
 		records = []config.ConnectionRecord{}
 	}
 	writeJSON(w, 200, records)
+}
+
+func (h *Handler) getExecHistory(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, 400, "invalid server id")
+		return
+	}
+	records, err := h.store.GetExecHistory(id, 50)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if records == nil {
+		records = []config.ExecRecord{}
+	}
+	writeJSON(w, 200, records)
+}
+
+func (h *Handler) getAuditLog(w http.ResponseWriter, r *http.Request) {
+	limit := 100
+	offset := 0
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil {
+			limit = v
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil {
+			offset = v
+		}
+	}
+	entries, err := h.store.GetAuditLog(limit, offset)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if entries == nil {
+		entries = []config.AuditEntry{}
+	}
+	writeJSON(w, 200, entries)
 }
 
 func parseID(r *http.Request) (int, error) {

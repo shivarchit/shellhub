@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry } from './types'
 
 const BASE = '/api'
 
@@ -61,3 +61,9 @@ export const importData = (data: unknown, mode: 'merge' | 'replace') =>
     method: 'POST',
     body: JSON.stringify(data),
   })
+
+export const getExecHistory = (id: number) =>
+  request<ExecRecord[]>(`/servers/${id}/exec-history`)
+
+export const getAuditLog = (limit = 100, offset = 0) =>
+  request<AuditEntry[]>(`/audit-log?limit=${limit}&offset=${offset}`)

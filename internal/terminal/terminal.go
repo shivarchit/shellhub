@@ -77,10 +77,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recordID, _ := h.store.LogConnect(id)
+	h.store.LogAudit("terminal_connect", &id, srv.Name)
 	defer func() {
 		if recordID > 0 {
 			h.store.LogDisconnect(recordID)
 		}
+		h.store.LogAudit("terminal_disconnect", &id, srv.Name)
 	}()
 
 	var once sync.Once

@@ -394,3 +394,194 @@ func TestImportData_Replace(t *testing.T) {
 		t.Fatalf("expected Replacement server, got %s", servers[0].Name)
 	}
 }
+
+func TestGetExecHistory_Empty(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	req = httptest.NewRequest("GET", "/api/servers/1/exec-history", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var records []config.ExecRecord
+	json.Unmarshal(rec.Body.Bytes(), &records)
+	if len(records) != 0 {
+		t.Fatalf("expected empty exec history, got %d", len(records))
+	}
+}
+
+func TestGetExecHistory_AfterExec(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Execute a command
+	execBody := `{"command":"echo hello"}`
+	req = httptest.NewRequest("POST", "/api/servers/1/exec", bytes.NewBufferString(execBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Check exec history
+	req = httptest.NewRequest("GET", "/api/servers/1/exec-history", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var records []config.ExecRecord
+	json.Unmarshal(rec.Body.Bytes(), &records)
+	if len(records) != 1 {
+		t.Fatalf("expected 1 exec record, got %d", len(records))
+	}
+	if records[0].CommandName != "echo hello" {
+		t.Fatalf("expected command 'echo hello', got %q", records[0].CommandName)
+	}
+	if records[0].ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", records[0].ExitCode)
+	}
+}
+
+func TestGetExecHistory_InvalidID(t *testing.T) {
+	_, mux := setupHandler(t)
+	req := httptest.NewRequest("GET", "/api/servers/abc/exec-history", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestGetAuditLog_Empty(t *testing.T) {
+	_, mux := setupHandler(t)
+	req := httptest.NewRequest("GET", "/api/audit-log", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var entries []config.AuditEntry
+	json.Unmarshal(rec.Body.Bytes(), &entries)
+	if len(entries) != 0 {
+		t.Fatalf("expected empty audit log, got %d", len(entries))
+	}
+}
+
+func TestGetAuditLog_AfterActions(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server (generates audit entry)
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Update the server (generates audit entry)
+	update := `{"name":"Updated","host":"2.2.2.2","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req = httptest.NewRequest("PUT", "/api/servers/1", bytes.NewBufferString(update))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Check audit log
+	req = httptest.NewRequest("GET", "/api/audit-log", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var entries []config.AuditEntry
+	json.Unmarshal(rec.Body.Bytes(), &entries)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 audit entries, got %d", len(entries))
+	}
+	// Most recent first
+	if entries[0].Action != "server_update" {
+		t.Fatalf("expected first entry to be server_update, got %q", entries[0].Action)
+	}
+	if entries[1].Action != "server_create" {
+		t.Fatalf("expected second entry to be server_create, got %q", entries[1].Action)
+	}
+}
+
+func TestGetAuditLog_WithPagination(t *testing.T) {
+	_, mux := setupHandler(t)
+	req := httptest.NewRequest("GET", "/api/audit-log?limit=5&offset=0", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+}
+
+func TestAuditLog_DeleteCreatesEntry(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Delete it
+	req = httptest.NewRequest("DELETE", "/api/servers/1", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Check audit log
+	req = httptest.NewRequest("GET", "/api/audit-log", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var entries []config.AuditEntry
+	json.Unmarshal(rec.Body.Bytes(), &entries)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 audit entries (create+delete), got %d", len(entries))
+	}
+	if entries[0].Action != "server_delete" {
+		t.Fatalf("expected most recent to be server_delete, got %q", entries[0].Action)
+	}
+}
+
+func TestAuditLog_ExecCreatesEntry(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Execute a command
+	execBody := `{"command":"ls -la"}`
+	req = httptest.NewRequest("POST", "/api/servers/1/exec", bytes.NewBufferString(execBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Check audit log has both create and exec
+	req = httptest.NewRequest("GET", "/api/audit-log", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var entries []config.AuditEntry
+	json.Unmarshal(rec.Body.Bytes(), &entries)
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 audit entries, got %d", len(entries))
+	}
+	if entries[0].Action != "command_exec" {
+		t.Fatalf("expected most recent to be command_exec, got %q", entries[0].Action)
+	}
+	if entries[0].Details != "ls -la" {
+		t.Fatalf("expected details 'ls -la', got %q", entries[0].Details)
+	}
+}

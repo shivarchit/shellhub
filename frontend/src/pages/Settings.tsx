@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData } from '../lib/api'
+import { getSettings, updateSettings, exportData, importData, getAuditLog } from '../lib/api'
+import type { AuditEntry } from '../lib/types'
 
 export default function Settings() {
   const navigate = useNavigate()
@@ -11,6 +12,16 @@ export default function Settings() {
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState('')
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
+
+  const actionColors: Record<string, string> = {
+    server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
+    server_update: 'bg-surface-600 text-accent-blue border-border',
+    server_delete: 'bg-accent-red-bg text-accent-red border-accent-red-dim',
+    command_exec: 'bg-surface-600 text-text-primary border-border',
+    terminal_connect: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
+    terminal_disconnect: 'bg-accent-red-bg text-accent-red border-accent-red-dim',
+  }
 
   useEffect(() => {
     getSettings()
@@ -18,6 +29,9 @@ export default function Settings() {
         if (s.ping_interval) setPingInterval(s.ping_interval)
       })
       .catch(() => {})
+    getAuditLog()
+      .then(setAuditEntries)
+      .catch(() => setAuditEntries([]))
   }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,6 +218,46 @@ export default function Settings() {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Audit Log section */}
+          <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+              Audit Log
+            </h2>
+            {auditEntries.length === 0 ? (
+              <p className="text-sm text-text-muted">No audit entries yet.</p>
+            ) : (
+              <div className="max-h-96 overflow-y-auto space-y-1.5">
+                {auditEntries.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg text-xs"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-semibold uppercase ${
+                          actionColors[entry.action] || 'bg-surface-600 text-text-muted border-border'
+                        }`}
+                      >
+                        {entry.action.replace(/_/g, ' ')}
+                      </span>
+                      {entry.details && (
+                        <span className="text-text-primary truncate max-w-[200px]">
+                          {entry.details}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-text-muted">
+                      {entry.server_id !== null && (
+                        <span>Server #{entry.server_id}</span>
+                      )}
+                      <span>{entry.created_at}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

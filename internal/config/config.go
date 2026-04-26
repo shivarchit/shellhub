@@ -108,6 +108,36 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS exec_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			server_id INTEGER NOT NULL,
+			command_name TEXT NOT NULL,
+			command_text TEXT NOT NULL,
+			output TEXT NOT NULL DEFAULT '',
+			exit_code INTEGER NOT NULL DEFAULT -1,
+			executed_at TEXT NOT NULL DEFAULT (datetime('now')),
+			duration_ms INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS audit_log (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			action TEXT NOT NULL,
+			server_id INTEGER,
+			details TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Add new columns for key-based auth (harmlessly errors if columns already exist)
 	s := &Store{db: db}
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
@@ -369,4 +399,82 @@ func (s *Store) GetConnectionHistory(serverID, limit int) ([]ConnectionRecord, e
 		records = append(records, r)
 	}
 	return records, rows.Err()
+}
+
+type ExecRecord struct {
+	ID          int    `json:"id"`
+	ServerID    int    `json:"server_id"`
+	CommandName string `json:"command_name"`
+	CommandText string `json:"command_text"`
+	Output      string `json:"output"`
+	ExitCode    int    `json:"exit_code"`
+	ExecutedAt  string `json:"executed_at"`
+	DurationMs  int    `json:"duration_ms"`
+}
+
+func (s *Store) LogExec(rec ExecRecord) error {
+	_, err := s.db.Exec(
+		`INSERT INTO exec_history (server_id, command_name, command_text, output, exit_code, duration_ms)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		rec.ServerID, rec.CommandName, rec.CommandText, rec.Output, rec.ExitCode, rec.DurationMs,
+	)
+	return err
+}
+
+func (s *Store) GetExecHistory(serverID, limit int) ([]ExecRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, server_id, command_name, command_text, output, exit_code, executed_at, duration_ms
+		 FROM exec_history WHERE server_id = ? ORDER BY id DESC LIMIT ?`,
+		serverID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []ExecRecord
+	for rows.Next() {
+		var r ExecRecord
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
+}
+
+type AuditEntry struct {
+	ID        int    `json:"id"`
+	Action    string `json:"action"`
+	ServerID  *int   `json:"server_id"`
+	Details   string `json:"details"`
+	CreatedAt string `json:"created_at"`
+}
+
+func (s *Store) LogAudit(action string, serverID *int, details string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO audit_log (action, server_id, details) VALUES (?, ?, ?)`,
+		action, serverID, details,
+	)
+	return err
+}
+
+func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
+	rows, err := s.db.Query(
+		`SELECT id, action, server_id, details, created_at
+		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`,
+		limit, offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var entries []AuditEntry
+	for rows.Next() {
+		var e AuditEntry
+		if err := rows.Scan(&e.ID, &e.Action, &e.ServerID, &e.Details, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
 }

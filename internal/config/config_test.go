@@ -430,6 +430,151 @@ func TestAddServer_DefaultAuthType(t *testing.T) {
 	}
 }
 
+func TestLogExec(t *testing.T) {
+	s := tempStoreWithData(t)
+	err := s.LogExec(ExecRecord{
+		ServerID:    1,
+		CommandName: "uptime",
+		CommandText: "uptime",
+		Output:      " 10:00:00 up 1 day",
+		ExitCode:    0,
+		DurationMs:  42,
+	})
+	if err != nil {
+		t.Fatalf("LogExec error: %v", err)
+	}
+	records, err := s.GetExecHistory(1, 10)
+	if err != nil {
+		t.Fatalf("GetExecHistory error: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	r := records[0]
+	if r.CommandName != "uptime" || r.ExitCode != 0 || r.DurationMs != 42 {
+		t.Fatalf("unexpected record: %+v", r)
+	}
+	if r.ExecutedAt == "" {
+		t.Fatal("expected executed_at to be set")
+	}
+}
+
+func TestGetExecHistory_Empty(t *testing.T) {
+	s := tempStoreWithData(t)
+	records, err := s.GetExecHistory(1, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if records != nil {
+		t.Fatalf("expected nil records for empty history, got %d", len(records))
+	}
+}
+
+func TestGetExecHistory_OrderAndLimit(t *testing.T) {
+	s := tempStoreWithData(t)
+	for i := 0; i < 5; i++ {
+		s.LogExec(ExecRecord{ServerID: 1, CommandName: "cmd", CommandText: "cmd", ExitCode: i})
+	}
+	records, err := s.GetExecHistory(1, 3)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(records) != 3 {
+		t.Fatalf("expected 3 records (limit), got %d", len(records))
+	}
+	if records[0].ID <= records[1].ID {
+		t.Fatalf("expected descending order, got IDs %d, %d", records[0].ID, records[1].ID)
+	}
+}
+
+func TestExecHistory_CascadeDelete(t *testing.T) {
+	s := tempStoreWithData(t)
+	s.LogExec(ExecRecord{ServerID: 1, CommandName: "cmd", CommandText: "cmd"})
+	s.DeleteServer(1)
+	var count int
+	s.db.QueryRow(`SELECT COUNT(*) FROM exec_history WHERE server_id = 1`).Scan(&count)
+	if count != 0 {
+		t.Fatalf("expected 0 exec records after cascade delete, got %d", count)
+	}
+}
+
+func TestLogAudit(t *testing.T) {
+	s := tempStore(t)
+	serverID := 1
+	err := s.LogAudit("server_create", &serverID, "Test Server")
+	if err != nil {
+		t.Fatalf("LogAudit error: %v", err)
+	}
+	entries, err := s.GetAuditLog(10, 0)
+	if err != nil {
+		t.Fatalf("GetAuditLog error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	e := entries[0]
+	if e.Action != "server_create" || e.Details != "Test Server" {
+		t.Fatalf("unexpected entry: %+v", e)
+	}
+	if e.ServerID == nil || *e.ServerID != 1 {
+		t.Fatalf("expected server_id 1, got %v", e.ServerID)
+	}
+	if e.CreatedAt == "" {
+		t.Fatal("expected created_at to be set")
+	}
+}
+
+func TestLogAudit_NilServerID(t *testing.T) {
+	s := tempStore(t)
+	err := s.LogAudit("some_action", nil, "no server")
+	if err != nil {
+		t.Fatalf("LogAudit error: %v", err)
+	}
+	entries, err := s.GetAuditLog(10, 0)
+	if err != nil {
+		t.Fatalf("GetAuditLog error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	if entries[0].ServerID != nil {
+		t.Fatalf("expected nil server_id, got %v", entries[0].ServerID)
+	}
+}
+
+func TestGetAuditLog_OrderAndPagination(t *testing.T) {
+	s := tempStore(t)
+	for i := 0; i < 5; i++ {
+		s.LogAudit("action", nil, "")
+	}
+	entries, err := s.GetAuditLog(3, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 entries (limit), got %d", len(entries))
+	}
+	if entries[0].ID <= entries[1].ID {
+		t.Fatalf("expected descending order, got IDs %d, %d", entries[0].ID, entries[1].ID)
+	}
+	// Test offset
+	entries2, _ := s.GetAuditLog(3, 3)
+	if len(entries2) != 2 {
+		t.Fatalf("expected 2 entries with offset 3, got %d", len(entries2))
+	}
+}
+
+func TestGetAuditLog_Empty(t *testing.T) {
+	s := tempStore(t)
+	entries, err := s.GetAuditLog(10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if entries != nil {
+		t.Fatalf("expected nil entries for empty log, got %d", len(entries))
+	}
+}
+
 func TestImportFromYAML_AlreadyHasData(t *testing.T) {
 	s := tempStoreWithData(t) // already has 1 server
 

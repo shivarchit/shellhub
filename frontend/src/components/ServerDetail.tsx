@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Server, ExecResult, QuickCommand, ConnectionRecord } from '../lib/types'
-import { getConnectionHistory } from '../lib/api'
+import type { Server, ExecResult, QuickCommand, ConnectionRecord, ExecRecord } from '../lib/types'
+import { getConnectionHistory, getExecHistory } from '../lib/api'
 import { cn } from '../lib/utils'
 import StatusDot from './StatusDot'
 import CommandCard from './CommandCard'
@@ -35,6 +35,7 @@ export default function ServerDetail({
   onExecComplete,
 }: ServerDetailProps) {
   const [lastConnected, setLastConnected] = useState<ConnectionRecord | null>(null)
+  const [execHistory, setExecHistory] = useState<ExecRecord[]>([])
 
   useEffect(() => {
     getConnectionHistory(server.id)
@@ -42,6 +43,9 @@ export default function ServerDetail({
         setLastConnected(records.length > 0 ? records[0] : null)
       })
       .catch(() => setLastConnected(null))
+    getExecHistory(server.id)
+      .then(setExecHistory)
+      .catch(() => setExecHistory([]))
   }, [server.id])
 
   const handleDelete = () => {
@@ -160,6 +164,32 @@ export default function ServerDetail({
           </div>
         )}
       </div>
+
+      {/* Recent Executions */}
+      {execHistory.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted mb-3">Recent Executions</h3>
+          <div className="space-y-1.5">
+            {execHistory.slice(0, 10).map(rec => (
+              <div key={rec.id} className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={cn(
+                    'w-1.5 h-1.5 rounded-full',
+                    rec.exit_code === 0 ? 'bg-accent-green' : 'bg-accent-red'
+                  )} />
+                  <span className="text-text-primary font-medium truncate max-w-[200px]">{rec.command_name}</span>
+                </div>
+                <div className="flex items-center gap-3 text-text-muted">
+                  <span className={rec.exit_code === 0 ? 'text-accent-green' : 'text-accent-red'}>
+                    exit {rec.exit_code}
+                  </span>
+                  <span>{timeAgo(rec.executed_at)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
