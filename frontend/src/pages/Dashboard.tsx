@@ -7,6 +7,7 @@ import {
   updateServer,
   deleteServer,
   pingServer,
+  execCommand,
   getSettings,
 } from '../lib/api'
 import Sidebar from '../components/Sidebar'
@@ -158,9 +159,7 @@ export default function Dashboard() {
     setExecResult(null)
     const start = performance.now()
     try {
-      const result = await import('../lib/api').then((api) =>
-        api.execCommand(selectedId, command.command)
-      )
+      const result = await execCommand(selectedId, command.command)
       const elapsed = Math.round(performance.now() - start)
       setExecResult({ result, command, duration: elapsed })
     } catch {
