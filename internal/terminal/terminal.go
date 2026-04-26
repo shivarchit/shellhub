@@ -76,6 +76,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	recordID, _ := h.store.LogConnect(id)
+	defer func() {
+		if recordID > 0 {
+			h.store.LogDisconnect(recordID)
+		}
+	}()
+
 	var once sync.Once
 	done := make(chan struct{})
 	closeDone := func() { once.Do(func() { close(done) }) }

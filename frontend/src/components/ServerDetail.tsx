@@ -1,7 +1,19 @@
-import type { Server, ExecResult, QuickCommand } from '../lib/types'
+import { useEffect, useState } from 'react'
+import type { Server, ExecResult, QuickCommand, ConnectionRecord } from '../lib/types'
+import { getConnectionHistory } from '../lib/api'
 import { cn } from '../lib/utils'
 import StatusDot from './StatusDot'
 import CommandCard from './CommandCard'
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr + 'Z').getTime()
+  const min = Math.floor(diff / 60000)
+  if (min < 1) return 'just now'
+  if (min < 60) return `${min}m ago`
+  const hrs = Math.floor(min / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
 
 interface ServerDetailProps {
   server: Server
@@ -22,6 +34,16 @@ export default function ServerDetail({
   onOpenTerminal,
   onExecComplete,
 }: ServerDetailProps) {
+  const [lastConnected, setLastConnected] = useState<ConnectionRecord | null>(null)
+
+  useEffect(() => {
+    getConnectionHistory(server.id)
+      .then((records) => {
+        setLastConnected(records.length > 0 ? records[0] : null)
+      })
+      .catch(() => setLastConnected(null))
+  }, [server.id])
+
   const handleDelete = () => {
     if (window.confirm(`Delete "${server.name}"? This cannot be undone.`)) {
       onDelete()
@@ -104,6 +126,16 @@ export default function ServerDetail({
             </p>
           </div>
         ))}
+      </div>
+
+      {/* Last Connected */}
+      <div className="mb-8">
+        <div className="bg-surface-800 rounded-lg border border-border p-4 inline-flex items-center gap-2">
+          <p className="text-xs text-text-muted">Last Connected:</p>
+          <p className="text-sm font-semibold text-text-primary">
+            {lastConnected ? timeAgo(lastConnected.connected_at) : 'Never'}
+          </p>
+        </div>
       </div>
 
       {/* Quick Commands */}

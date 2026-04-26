@@ -322,6 +322,96 @@ func TestAddServer_WithKeyAuth(t *testing.T) {
 	}
 }
 
+func TestLogConnect(t *testing.T) {
+	s := tempStoreWithData(t)
+	recordID, err := s.LogConnect(1)
+	if err != nil {
+		t.Fatalf("LogConnect error: %v", err)
+	}
+	if recordID < 1 {
+		t.Fatalf("expected positive record ID, got %d", recordID)
+	}
+	records, err := s.GetConnectionHistory(1, 10)
+	if err != nil {
+		t.Fatalf("GetConnectionHistory error: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].ServerID != 1 {
+		t.Fatalf("expected server_id 1, got %d", records[0].ServerID)
+	}
+	if records[0].ConnectedAt == "" {
+		t.Fatal("expected connected_at to be set")
+	}
+	if records[0].DisconnectedAt != nil {
+		t.Fatal("expected disconnected_at to be nil before disconnect")
+	}
+}
+
+func TestLogDisconnect(t *testing.T) {
+	s := tempStoreWithData(t)
+	recordID, _ := s.LogConnect(1)
+	err := s.LogDisconnect(recordID)
+	if err != nil {
+		t.Fatalf("LogDisconnect error: %v", err)
+	}
+	records, _ := s.GetConnectionHistory(1, 10)
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].DisconnectedAt == nil {
+		t.Fatal("expected disconnected_at to be set after disconnect")
+	}
+	if records[0].DurationSeconds < 0 {
+		t.Fatalf("expected non-negative duration, got %d", records[0].DurationSeconds)
+	}
+}
+
+func TestGetConnectionHistory_Empty(t *testing.T) {
+	s := tempStoreWithData(t)
+	records, err := s.GetConnectionHistory(1, 10)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if records != nil {
+		t.Fatalf("expected nil records for empty history, got %d", len(records))
+	}
+}
+
+func TestGetConnectionHistory_OrderAndLimit(t *testing.T) {
+	s := tempStoreWithData(t)
+	s.LogConnect(1)
+	s.LogConnect(1)
+	s.LogConnect(1)
+
+	records, err := s.GetConnectionHistory(1, 2)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 records (limit), got %d", len(records))
+	}
+	// Should be in descending order by ID
+	if records[0].ID <= records[1].ID {
+		t.Fatalf("expected descending order, got IDs %d, %d", records[0].ID, records[1].ID)
+	}
+}
+
+func TestConnectionHistory_CascadeDelete(t *testing.T) {
+	s := tempStoreWithData(t)
+	s.LogConnect(1)
+	s.LogConnect(1)
+	s.DeleteServer(1)
+
+	// After server deletion, history should be gone due to CASCADE
+	var count int
+	s.db.QueryRow(`SELECT COUNT(*) FROM connection_history WHERE server_id = 1`).Scan(&count)
+	if count != 0 {
+		t.Fatalf("expected 0 history records after cascade delete, got %d", count)
+	}
+}
+
 func TestAddServer_DefaultAuthType(t *testing.T) {
 	s := tempStore(t)
 	id, err := s.AddServer(Server{

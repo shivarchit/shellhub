@@ -27,7 +27,13 @@ type Server struct {
 	Group         string         `yaml:"group" json:"group" db:"group"`
 	AuthType      string         `yaml:"auth_type" json:"auth_type" db:"auth_type"`
 	PrivateKey    string         `yaml:"private_key" json:"private_key" db:"private_key"`
+	SortOrder     int            `yaml:"sort_order" json:"sort_order" db:"sort_order"`
 	QuickCommands []QuickCommand `yaml:"quick_commands" json:"quick_commands"`
+}
+
+type ServerOrder struct {
+	ID        int `json:"id"`
+	SortOrder int `json:"sort_order"`
 }
 
 type Store struct {
@@ -88,10 +94,25 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS connection_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			server_id INTEGER NOT NULL,
+			connected_at TEXT NOT NULL DEFAULT (datetime('now')),
+			disconnected_at TEXT,
+			duration_seconds INTEGER DEFAULT 0,
+			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Add new columns for key-based auth (harmlessly errors if columns already exist)
 	s := &Store{db: db}
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN private_key TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE servers ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
 
 	return s, nil
 }
@@ -101,7 +122,7 @@ func (s *Store) Close() error {
 }
 
 func (s *Store) GetServers() ([]Server, error) {
-	rows, err := s.db.Query(`SELECT id, name, host, port, username, password, "group", auth_type, private_key FROM servers ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id, name, host, port, username, password, "group", auth_type, private_key, sort_order FROM servers ORDER BY sort_order, id`)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +131,7 @@ func (s *Store) GetServers() ([]Server, error) {
 	var servers []Server
 	for rows.Next() {
 		var srv Server
-		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey); err != nil {
+		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey, &srv.SortOrder); err != nil {
 			return nil, err
 		}
 		cmds, err := s.getQuickCommands(srv.ID)
@@ -128,8 +149,8 @@ func (s *Store) GetServers() ([]Server, error) {
 
 func (s *Store) GetServer(id int) (*Server, error) {
 	var srv Server
-	err := s.db.QueryRow(`SELECT id, name, host, port, username, password, "group", auth_type, private_key FROM servers WHERE id = ?`, id).
-		Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey)
+	err := s.db.QueryRow(`SELECT id, name, host, port, username, password, "group", auth_type, private_key, sort_order FROM servers WHERE id = ?`, id).
+		Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey, &srv.SortOrder)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
@@ -149,8 +170,8 @@ func (s *Store) AddServer(srv Server) (int, error) {
 		srv.Port = 22
 	}
 	res, err := s.db.Exec(
-		`INSERT INTO servers (name, host, port, username, password, "group", auth_type, private_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, srv.AuthType, srv.PrivateKey,
+		`INSERT INTO servers (name, host, port, username, password, "group", auth_type, private_key, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, srv.AuthType, srv.PrivateKey, srv.SortOrder,
 	)
 	if err != nil {
 		return 0, err
@@ -190,8 +211,8 @@ func (s *Store) UpdateServer(id int, srv Server) error {
 	}
 
 	if _, err := tx.Exec(
-		`UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password = ?, "group" = ?, auth_type = ?, private_key = ? WHERE id = ?`,
-		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, srv.AuthType, srv.PrivateKey, id,
+		`UPDATE servers SET name = ?, host = ?, port = ?, username = ?, password = ?, "group" = ?, auth_type = ?, private_key = ?, sort_order = ? WHERE id = ?`,
+		srv.Name, srv.Host, srv.Port, srv.Username, srv.Password, srv.Group, srv.AuthType, srv.PrivateKey, srv.SortOrder, id,
 	); err != nil {
 		return err
 	}
@@ -284,4 +305,68 @@ func (s *Store) GetAllSettings() (map[string]string, error) {
 		settings[k] = v
 	}
 	return settings, rows.Err()
+}
+
+func (s *Store) ReorderServers(orders []ServerOrder) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, o := range orders {
+		if _, err := tx.Exec(`UPDATE servers SET sort_order = ? WHERE id = ?`, o.SortOrder, o.ID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+type ConnectionRecord struct {
+	ID              int     `json:"id"`
+	ServerID        int     `json:"server_id"`
+	ConnectedAt     string  `json:"connected_at"`
+	DisconnectedAt  *string `json:"disconnected_at"`
+	DurationSeconds int     `json:"duration_seconds"`
+}
+
+func (s *Store) LogConnect(serverID int) (int, error) {
+	res, err := s.db.Exec(
+		`INSERT INTO connection_history (server_id) VALUES (?)`, serverID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	return int(id), nil
+}
+
+func (s *Store) LogDisconnect(recordID int) error {
+	_, err := s.db.Exec(
+		`UPDATE connection_history SET
+			disconnected_at = datetime('now'),
+			duration_seconds = CAST((julianday(datetime('now')) - julianday(connected_at)) * 86400 AS INTEGER)
+		WHERE id = ?`, recordID,
+	)
+	return err
+}
+
+func (s *Store) GetConnectionHistory(serverID, limit int) ([]ConnectionRecord, error) {
+	rows, err := s.db.Query(
+		`SELECT id, server_id, connected_at, disconnected_at, duration_seconds
+		 FROM connection_history WHERE server_id = ? ORDER BY id DESC LIMIT ?`,
+		serverID, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var records []ConnectionRecord
+	for rows.Next() {
+		var r ConnectionRecord
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.ConnectedAt, &r.DisconnectedAt, &r.DurationSeconds); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	return records, rows.Err()
 }

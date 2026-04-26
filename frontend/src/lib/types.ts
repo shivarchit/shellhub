@@ -14,6 +14,7 @@ export interface Server {
   group: string
   auth_type: 'password' | 'key'
   private_key: string
+  sort_order: number
   quick_commands: QuickCommand[]
 }
 
@@ -26,4 +27,12 @@ export interface PingResult {
 export interface ExecResult {
   output: string
   exit_code: number
+}
+
+export interface ConnectionRecord {
+  id: number
+  server_id: number
+  connected_at: string
+  disconnected_at: string | null
+  duration_seconds: number
 }
