@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord } from './types'
 
 const BASE = '/api'
 
@@ -26,6 +26,9 @@ export const updateServer = (id: number, s: ServerInput) =>
 export const deleteServer = (id: number) =>
   request<void>(`/servers/${id}`, { method: 'DELETE' })
 
+export const reorderServers = (orders: { id: number; sort_order: number }[]) =>
+  request<void>('/servers/reorder', { method: 'PUT', body: JSON.stringify(orders) })
+
 export const pingServer = (id: number) =>
   request<PingResult>(`/servers/${id}/ping`, { method: 'POST' })
 
@@ -44,4 +47,17 @@ export const updateSettings = (settings: Record<string, string>) =>
   request<Record<string, string>>('/settings', {
     method: 'PUT',
     body: JSON.stringify(settings),
+  })
+
+export const getConnectionHistory = (id: number) =>
+  request<ConnectionRecord[]>(`/servers/${id}/history`)
+
+export const exportData = () => {
+  window.open('/api/export', '_blank')
+}
+
+export const importData = (data: unknown, mode: 'merge' | 'replace') =>
+  request<{ status: string; imported: number }>(`/import?mode=${mode}`, {
+    method: 'POST',
+    body: JSON.stringify(data),
   })

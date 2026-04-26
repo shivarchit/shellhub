@@ -246,3 +246,151 @@ func TestUpdateAndGetSettings(t *testing.T) {
 		t.Fatalf("expected '30', got %q", settings["ping_interval"])
 	}
 }
+
+func TestGetConnectionHistory_Empty(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	req = httptest.NewRequest("GET", "/api/servers/1/history", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var records []config.ConnectionRecord
+	json.Unmarshal(rec.Body.Bytes(), &records)
+	if len(records) != 0 {
+		t.Fatalf("expected empty history, got %d", len(records))
+	}
+}
+
+func TestGetConnectionHistory_WithRecords(t *testing.T) {
+	h, mux := setupHandler(t)
+	// Create a server
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Log a connection directly via store
+	recordID, err := h.store.LogConnect(1)
+	if err != nil {
+		t.Fatalf("LogConnect error: %v", err)
+	}
+	h.store.LogDisconnect(recordID)
+
+	req = httptest.NewRequest("GET", "/api/servers/1/history", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	var records []config.ConnectionRecord
+	json.Unmarshal(rec.Body.Bytes(), &records)
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].ServerID != 1 {
+		t.Fatalf("expected server_id 1, got %d", records[0].ServerID)
+	}
+	if records[0].DisconnectedAt == nil {
+		t.Fatal("expected disconnected_at to be set")
+	}
+}
+
+func TestGetConnectionHistory_InvalidID(t *testing.T) {
+	_, mux := setupHandler(t)
+	req := httptest.NewRequest("GET", "/api/servers/abc/history", nil)
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 400 {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestExportData(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create a server first
+	body := `{"name":"A","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","auth_type":"password","private_key":"","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	req = httptest.NewRequest("GET", "/api/export", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var export map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &export)
+	if export["version"] != float64(1) {
+		t.Fatal("expected version 1")
+	}
+	servers := export["servers"].([]any)
+	if len(servers) != 1 {
+		t.Fatalf("expected 1 server, got %d", len(servers))
+	}
+}
+
+func TestImportData_Merge(t *testing.T) {
+	_, mux := setupHandler(t)
+	importBody := `{"version":1,"servers":[{"name":"Imported","host":"2.2.2.2","port":22,"username":"u","password":"p","group":"G","auth_type":"password","private_key":"","quick_commands":[]}],"settings":{"ping_interval":"60"}}`
+	req := httptest.NewRequest("POST", "/api/import?mode=merge", bytes.NewBufferString(importBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var result map[string]any
+	json.Unmarshal(rec.Body.Bytes(), &result)
+	if result["status"] != "ok" {
+		t.Fatalf("expected status ok, got %v", result["status"])
+	}
+	if result["imported"] != float64(1) {
+		t.Fatalf("expected 1 imported, got %v", result["imported"])
+	}
+}
+
+func TestImportData_Replace(t *testing.T) {
+	_, mux := setupHandler(t)
+	// Create an existing server
+	body := `{"name":"Existing","host":"1.1.1.1","port":22,"username":"u","password":"p","group":"G","auth_type":"password","private_key":"","quick_commands":[]}`
+	req := httptest.NewRequest("POST", "/api/servers", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+
+	// Import with replace mode
+	importBody := `{"version":1,"servers":[{"name":"Replacement","host":"3.3.3.3","port":22,"username":"u","password":"p","group":"G","auth_type":"password","private_key":"","quick_commands":[]}],"settings":{}}`
+	req = httptest.NewRequest("POST", "/api/import?mode=replace", bytes.NewBufferString(importBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	// Verify only the replacement server exists
+	req = httptest.NewRequest("GET", "/api/servers", nil)
+	rec = httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	var servers []config.Server
+	json.Unmarshal(rec.Body.Bytes(), &servers)
+	if len(servers) != 1 {
+		t.Fatalf("expected 1 server after replace, got %d", len(servers))
+	}
+	if servers[0].Name != "Replacement" {
+		t.Fatalf("expected Replacement server, got %s", servers[0].Name)
+	}
+}

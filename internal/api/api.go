@@ -31,13 +31,17 @@ func NewHandler(store *config.Store, pinger Pinger, executor Executor) *Handler 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/servers", h.listServers)
 	mux.HandleFunc("POST /api/servers", h.createServer)
+	mux.HandleFunc("PUT /api/servers/reorder", h.reorderServers)
 	mux.HandleFunc("PUT /api/servers/{id}", h.updateServer)
 	mux.HandleFunc("DELETE /api/servers/{id}", h.deleteServer)
 	mux.HandleFunc("POST /api/servers/{id}/ping", h.pingServer)
 	mux.HandleFunc("POST /api/servers/{id}/exec", h.execCommand)
 	mux.HandleFunc("POST /api/ping", h.pingHost)
+	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
+	mux.HandleFunc("GET /api/export", h.exportData)
+	mux.HandleFunc("POST /api/import", h.importData)
 }
 
 func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
@@ -98,6 +102,19 @@ func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 404, "server not found")
 			return
 		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	w.WriteHeader(204)
+}
+
+func (h *Handler) reorderServers(w http.ResponseWriter, r *http.Request) {
+	var orders []config.ServerOrder
+	if err := readJSON(r, &orders); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if err := h.store.ReorderServers(orders); err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
@@ -192,6 +209,77 @@ func (h *Handler) updateSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	settings, _ := h.store.GetAllSettings()
 	writeJSON(w, 200, settings)
+}
+
+type ExportData struct {
+	Version  int               `json:"version"`
+	Servers  []config.Server   `json:"servers"`
+	Settings map[string]string `json:"settings"`
+}
+
+func (h *Handler) exportData(w http.ResponseWriter, r *http.Request) {
+	servers, err := h.store.GetServers()
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	settings, err := h.store.GetAllSettings()
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Disposition", `attachment; filename="shellhub-export.json"`)
+	writeJSON(w, 200, ExportData{Version: 1, Servers: servers, Settings: settings})
+}
+
+func (h *Handler) importData(w http.ResponseWriter, r *http.Request) {
+	mode := r.URL.Query().Get("mode")
+	if mode == "" {
+		mode = "merge"
+	}
+
+	var data ExportData
+	if err := readJSON(r, &data); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+
+	if mode == "replace" {
+		existing, _ := h.store.GetServers()
+		for _, s := range existing {
+			h.store.DeleteServer(s.ID)
+		}
+	}
+
+	count := 0
+	for _, srv := range data.Servers {
+		if _, err := h.store.AddServer(srv); err == nil {
+			count++
+		}
+	}
+	for k, v := range data.Settings {
+		h.store.SetSetting(k, v)
+	}
+
+	writeJSON(w, 200, map[string]any{"status": "ok", "imported": count})
+}
+
+func (h *Handler) getConnectionHistory(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, 400, "invalid server id")
+		return
+	}
+	records, err := h.store.GetConnectionHistory(id, 20)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	if records == nil {
+		records = []config.ConnectionRecord{}
+	}
+	writeJSON(w, 200, records)
 }
 
 func parseID(r *http.Request) (int, error) {
