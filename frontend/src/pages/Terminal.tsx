@@ -196,10 +196,10 @@ export default function TerminalPage() {
       />
 
       {/* Main content */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 relative">
         {/* Terminal area */}
-        <div className="flex-1 flex flex-col min-w-0">
-          <div ref={terminalRef} className="flex-1 min-h-0 p-1" />
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <div ref={terminalRef} className="flex-1 min-h-0 p-1 overflow-hidden" />
 
           {/* Status bar */}
           <div className="flex items-center justify-between bg-surface-800 border-t border-border px-4 py-1">
@@ -226,18 +226,20 @@ export default function TerminalPage() {
 
         {/* Command panel */}
         {showPanel && connected && (
-          <CommandPanel
-            server={server}
-            onPasteToTerminal={handlePaste}
-            onClose={() => setShowPanel(false)}
-          />
+          <div className="relative z-10 flex-shrink-0">
+            <CommandPanel
+              server={server}
+              onPasteToTerminal={handlePaste}
+              onClose={() => setShowPanel(false)}
+            />
+          </div>
         )}
 
         {/* Panel toggle button when closed */}
         {!showPanel && connected && (
           <button
             onClick={() => setShowPanel(true)}
-            className="absolute right-0 top-1/2 -translate-y-1/2 bg-surface-800 border border-border border-r-0 rounded-l-md px-1.5 py-3 text-text-muted hover:text-text-primary transition-colors"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-surface-800 border border-border border-r-0 rounded-l-md px-1.5 py-3 text-text-muted hover:text-text-primary transition-colors"
             title="Open command panel"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
