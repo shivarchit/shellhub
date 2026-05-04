@@ -73,6 +73,8 @@ export default function TerminalPage() {
       fontFamily: 'JetBrains Mono, Consolas, monospace',
       fontSize: 14,
       lineHeight: 1.2,
+      allowProposedApi: true,
+      rightClickSelectsWord: true,
       theme: {
         background: '#06090f',
         foreground: '#e8edf5',
@@ -96,6 +98,22 @@ export default function TerminalPage() {
     if (terminalRef.current) {
       term.open(terminalRef.current)
       requestAnimationFrame(() => fitAddon.fit())
+
+      // Right-click paste
+      terminalRef.current.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        const sel = term.getSelection()
+        if (sel) {
+          navigator.clipboard.writeText(sel)
+          term.clearSelection()
+        } else {
+          navigator.clipboard.readText().then(text => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(new TextEncoder().encode(text))
+            }
+          })
+        }
+      })
     }
 
     const ws = createTerminalSocket(serverId)
@@ -128,6 +146,25 @@ export default function TerminalPage() {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(new TextEncoder().encode(data))
       }
+    })
+
+    // Ctrl+Shift+C to copy selection, Ctrl+Shift+V to paste
+    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
+      if (e.type !== 'keydown') return true
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+        const sel = term.getSelection()
+        if (sel) navigator.clipboard.writeText(sel)
+        return false
+      }
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
+        navigator.clipboard.readText().then(text => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(new TextEncoder().encode(text))
+          }
+        })
+        return false
+      }
+      return true
     })
 
     term.onResize(({ cols, rows }) => {
@@ -226,7 +263,7 @@ export default function TerminalPage() {
 
         {/* Command panel */}
         {showPanel && connected && (
-          <div className="relative z-10 flex-shrink-0">
+          <div className="relative z-10 flex-shrink-0 h-full">
             <CommandPanel
               server={server}
               onPasteToTerminal={handlePaste}
