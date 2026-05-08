@@ -6,6 +6,7 @@ Built with Go + React. Ships as a single binary with system tray support.
 
 ## Features
 
+### Core
 - **Server Dashboard** — manage servers grouped by environment, see online/offline status at a glance
 - **Interactive Terminal** — full xterm.js terminal in the browser with color support, resize, and tab completion
 - **Quick Commands** — save named commands per server (flush cache, restart service, tail logs) and run them with one click
@@ -15,13 +16,40 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Single Binary** — Go embeds the entire React frontend, deploy one file and you're done
 - **SQLite Storage** — servers and commands stored in a local SQLite database, managed entirely from the web UI
 - **YAML Import** — optionally bootstrap from a `servers.yaml` file on first run
+
+### Authentication & Security
+- **Login System** — username/password authentication with bcrypt password hashing
+- **Session Tokens** — HMAC-SHA256 tokens in httpOnly cookies (24h expiry)
+- **Encrypted Credentials** — server passwords and SSH keys encrypted at rest with AES-256-GCM
+- **Rate Limiting** — accounts locked after 5 failed login attempts in 10 minutes (auto-unlock after 30 min)
+- **First-Run Setup** — registration page shown when no users exist, then protected by auth
+- **Login Audit** — all login attempts (success/failure) logged with IP and user agent
+
+### Terminal Power
+- **Multi-Tab Terminals** — open multiple terminal sessions simultaneously (Ctrl+T to open, Ctrl+W to close, Ctrl+1-9 to switch)
+- **Terminal Search** — Ctrl+F to search scrollback with regex, case sensitivity, and match navigation
+- **Session Recording** — record terminal sessions in asciicast v2 format with one-click toggle
+- **Recording Playback** — full player with play/pause, speed control (0.5x-4x), seek bar, and idle-skip
+- **Download Recordings** — export as `.cast` files compatible with asciinema
+
+### Commands & Audit
+- **Global Commands** — define commands shared across all servers, managed in Settings
+- **Command Templates** — use `{{variable}}` or `{{variable:default}}` syntax for parameterized commands
+- **Built-in Variables** — auto-resolve `{{hostname}}`, `{{username}}`, `{{port}}`, `{{date}}`, `{{server_name}}`
+- **Full Audit Trail** — dedicated `/audit` page with filtering, search, pagination, and CSV export
+- **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
+
+### Monitoring & Metrics
+- **Server Stats Widgets** — live CPU, memory, disk usage, uptime, and load average per server
+- **Metrics Dashboard** — historical charts for uptime %, connections, command execution rates, and latency
+- **Time Range Selector** — view metrics for last 24h, 7d, or 30d
+- **CSS/SVG Charts** — lightweight visualization with no external charting libraries
+- **Auto-Refresh** — stats refresh every 60 seconds, configurable ping interval for status checks
+
+### Organization
 - **Drag & Drop** — reorder servers within groups by dragging
 - **Export / Import** — backup and restore your server configs as JSON
-- **Execution History** — tracks all command runs with output, exit codes, and timestamps
-- **Audit Log** — logs all significant actions (server CRUD, terminal sessions, command runs)
-- **Auto-Refresh** — configurable ping interval to keep server status up to date
 - **Toast Notifications** — real-time feedback when commands complete
-- **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
 - **Keyboard Shortcuts** — `Ctrl+K` to focus server search
 
 ## Quick Start
@@ -33,7 +61,8 @@ Just double-click `shellhub.exe` (or run `./shellhub` on Linux/macOS).
 On first launch:
 1. A folder picker dialog asks where to store your data
 2. Your browser opens automatically to the dashboard
-3. A tray icon appears — right-click it to open the browser or stop the server
+3. Create your admin account (first-run registration)
+4. A tray icon appears — right-click it to open the browser or stop the server
 
 Add servers from the browser. Everything is stored in `shellhub.db` in the folder you chose.
 
@@ -126,10 +155,55 @@ See `servers.example.yaml` for a full example with multiple servers.
 
 Access settings via the gear icon in the sidebar or navigate to `/settings`.
 
+**General:**
 - **Ping Interval** — how often to check server online/offline status (default: 30 minutes)
 - **Export** — download all servers and settings as a JSON file
 - **Import** — upload a JSON backup to merge or replace existing data
-- **Audit Log** — view all actions (server changes, terminal sessions, command executions)
+- **Audit Log** — view recent actions with link to full audit trail
+
+**Commands:**
+- **Global Commands** — create, edit, delete commands shared across all servers
+- **Template Support** — mark commands as templates with variable placeholders
+
+**Security & Audit:**
+- **Login Attempts** — view all login attempts with success/failure status
+- **Security Info** — overview of encryption and auth measures in place
+- **Logout** — end current session
+
+## API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/servers` | List all servers |
+| POST | `/api/servers` | Create server |
+| PUT | `/api/servers/{id}` | Update server |
+| DELETE | `/api/servers/{id}` | Delete server |
+| PUT | `/api/servers/reorder` | Reorder servers |
+| POST | `/api/servers/{id}/ping` | Check server online status |
+| POST | `/api/servers/{id}/exec` | Execute command on server |
+| GET | `/api/servers/{id}/stats` | Get live server stats (CPU/mem/disk) |
+| GET | `/api/servers/{id}/history` | Connection history |
+| GET | `/api/servers/{id}/exec-history` | Execution history for server |
+| GET | `/api/global-commands` | List global commands |
+| POST | `/api/global-commands` | Create global command |
+| PUT | `/api/global-commands/{id}` | Update global command |
+| DELETE | `/api/global-commands/{id}` | Delete global command |
+| GET | `/api/exec-history` | Full exec history (paginated, filterable) |
+| GET | `/api/exec-history/export` | Export exec history as CSV |
+| GET | `/api/recordings` | List session recordings |
+| GET | `/api/recordings/{id}` | Get recording with data |
+| DELETE | `/api/recordings/{id}` | Delete recording |
+| GET | `/api/metrics` | Metrics dashboard data |
+| GET | `/api/audit-log` | Audit log entries |
+| GET | `/api/settings` | Get app settings |
+| PUT | `/api/settings` | Update settings |
+| GET | `/api/export` | Export all data as JSON |
+| POST | `/api/import` | Import data from JSON |
+| POST | `/api/auth/register` | Register first user |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/logout` | Logout |
+| GET | `/api/auth/status` | Auth status check |
+| WS | `/api/terminal/{id}` | WebSocket terminal session |
 
 ## Cross-Platform Builds
 
@@ -177,7 +251,7 @@ Cross-platform binaries land in `build/dist/`. Each is a self-contained single f
 
 **Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray, sqweek/dialog
 
-**Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, React Router, @dnd-kit
+**Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, @xterm/addon-search, React Router, @dnd-kit
 
 ## Project Structure
 
@@ -190,15 +264,16 @@ shellhub/
 │   ├── Makefile            # Make build script (Linux/macOS)
 │   └── dist/               # Cross-platform binaries (gitignored)
 ├── internal/
-│   ├── config/             # SQLite store (servers, settings, history, audit)
+│   ├── auth/               # Authentication (bcrypt, JWT, AES-256-GCM encryption)
+│   ├── config/             # SQLite store (servers, settings, history, audit, metrics)
 │   ├── settings/           # Persisted app settings (DB path)
 │   ├── ssh/                # SSH client (password + key auth)
-│   ├── api/                # REST API handlers
-│   ├── terminal/           # WebSocket ↔ SSH bridge
+│   ├── api/                # REST API handlers + stats/metrics endpoints
+│   ├── terminal/           # WebSocket ↔ SSH bridge with recording support
 │   └── tray/               # System tray icon + menu
 └── frontend/
     └── src/
-        ├── pages/          # Dashboard, Terminal, Settings
-        ├── components/     # Sidebar, CommandCard, ExecModal, ToastProvider, etc.
-        └── lib/            # API client, types, WebSocket helpers, hooks
+        ├── pages/          # Dashboard, Terminal, Settings, Login, Audit, Recordings, Metrics
+        ├── components/     # Sidebar, CommandCard, TabBar, TerminalSearch, ServerStatsWidget, etc.
+        └── lib/            # API client, types, WebSocket helpers, auth context, templates
 ```
