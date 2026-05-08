@@ -279,12 +279,21 @@ export default function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 border-t border-border space-y-2">
         <button
           onClick={onAdd}
           className="w-full py-2 text-sm text-text-secondary border border-dashed border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
         >
           + Add Server
+        </button>
+        <button
+          onClick={() => navigate('/audit')}
+          className="w-full py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <path d="M2 3h12M2 7h8M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          Audit Trail
         </button>
       </div>
     </aside>

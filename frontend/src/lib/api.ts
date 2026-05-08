@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter } from './types'
 
 const BASE = '/api'
 
@@ -67,3 +67,39 @@ export const getExecHistory = (id: number) =>
 
 export const getAuditLog = (limit = 100, offset = 0) =>
   request<AuditEntry[]>(`/audit-log?limit=${limit}&offset=${offset}`)
+
+// Global Commands
+export const getGlobalCommands = () =>
+  request<GlobalCommand[]>('/global-commands')
+
+export const createGlobalCommand = (cmd: GlobalCommandInput) =>
+  request<GlobalCommand>('/global-commands', { method: 'POST', body: JSON.stringify(cmd) })
+
+export const updateGlobalCommand = (id: number, cmd: GlobalCommandInput) =>
+  request<GlobalCommand>(`/global-commands/${id}`, { method: 'PUT', body: JSON.stringify(cmd) })
+
+export const deleteGlobalCommand = (id: number) =>
+  request<void>(`/global-commands/${id}`, { method: 'DELETE' })
+
+// Full Exec History (audit trail)
+export const getAllExecHistory = (filter: ExecHistoryFilter) => {
+  const params = new URLSearchParams()
+  if (filter.limit) params.set('limit', String(filter.limit))
+  if (filter.offset) params.set('offset', String(filter.offset))
+  if (filter.server_id) params.set('server_id', String(filter.server_id))
+  if (filter.search) params.set('search', filter.search)
+  if (filter.exit_code !== undefined) params.set('exit_code', String(filter.exit_code))
+  if (filter.date_from) params.set('date_from', filter.date_from)
+  if (filter.date_to) params.set('date_to', filter.date_to)
+  return request<ExecHistoryPage>(`/exec-history?${params.toString()}`)
+}
+
+export const exportExecHistoryCSV = (filter: ExecHistoryFilter) => {
+  const params = new URLSearchParams()
+  if (filter.server_id) params.set('server_id', String(filter.server_id))
+  if (filter.search) params.set('search', filter.search)
+  if (filter.exit_code !== undefined) params.set('exit_code', String(filter.exit_code))
+  if (filter.date_from) params.set('date_from', filter.date_from)
+  if (filter.date_to) params.set('date_to', filter.date_to)
+  window.open(`/api/exec-history/export?${params.toString()}`, '_blank')
+}
