@@ -199,12 +199,13 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 
 	// user_servers table for RBAC server access control
+	// Note: FK to users is not enforced here since users table is created by auth store.
+	// The ON DELETE CASCADE on server_id ensures cleanup when servers are deleted.
 	if _, err := db.Exec(`
 		CREATE TABLE IF NOT EXISTS user_servers (
 			user_id INTEGER NOT NULL,
 			server_id INTEGER NOT NULL,
 			PRIMARY KEY (user_id, server_id),
-			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
 			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
 		)
 	`); err != nil {
@@ -680,16 +681,12 @@ type AuditEntry struct {
 
 func (s *Store) LogAudit(action string, serverID *int, details string, userID ...int) error {
 	uid := 0
-	uname := ""
 	if len(userID) >= 1 {
 		uid = userID[0]
 	}
-	if len(userID) >= 2 {
-		// Hack: we pass username length won't work. Use the variadic overload pattern instead.
-	}
 	_, err := s.db.Exec(
-		`INSERT INTO audit_log (action, server_id, details, user_id, username) VALUES (?, ?, ?, ?, ?)`,
-		action, serverID, details, uid, uname,
+		`INSERT INTO audit_log (action, server_id, details, user_id, username) VALUES (?, ?, ?, ?, '')`,
+		action, serverID, details, uid,
 	)
 	return err
 }
