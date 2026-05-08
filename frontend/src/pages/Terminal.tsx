@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Terminal as XTerm } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import { WebLinksAddon } from '@xterm/addon-web-links'
-import '@xterm/xterm/css/xterm.css'
 
 import type { Server } from '../lib/types'
 import { getServers } from '../lib/api'
-import { createTerminalSocket, sendResize } from '../lib/ws'
 import ConnectionBar from '../components/ConnectionBar'
 import CommandPanel from '../components/CommandPanel'
+import TabBar, { type TabInfo } from '../components/TabBar'
+import TerminalTab from '../components/TerminalTab'
+import ServerPicker from '../components/ServerPicker'
 
 function formatTime(totalSeconds: number): string {
   const h = String(Math.floor(totalSeconds / 3600)).padStart(2, '0')
@@ -18,194 +16,256 @@ function formatTime(totalSeconds: number): string {
   return `${h}:${m}:${s}`
 }
 
+let tabCounter = 0
+function generateTabId(): string {
+  return `tab-${++tabCounter}-${Date.now()}`
+}
+
+interface TabState {
+  id: string
+  serverId: number
+  server: Server | null
+  connected: boolean
+  elapsed: number
+  recording: boolean
+  recordingId: number | null
+  termSize: { cols: number; rows: number }
+}
+
 export default function TerminalPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
-  const [server, setServer] = useState<Server | null>(null)
-  const [connected, setConnected] = useState(false)
-  const [elapsed, setElapsed] = useState(0)
+  const [tabs, setTabs] = useState<TabState[]>([])
+  const [activeTabId, setActiveTabId] = useState<string>('')
   const [showPanel, setShowPanel] = useState(true)
-  const [termSize, setTermSize] = useState({ cols: 80, rows: 24 })
   const [notFound, setNotFound] = useState(false)
+  const [showServerPicker, setShowServerPicker] = useState(false)
   const [showDisconnectModal, setShowDisconnectModal] = useState(false)
+  const [disconnectedTab, setDisconnectedTab] = useState<TabState | null>(null)
 
-  const terminalRef = useRef<HTMLDivElement>(null)
-  const xtermRef = useRef<XTerm | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
-  const fitAddonRef = useRef<FitAddon | null>(null)
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const connectedRef = useRef(false)
+  const timerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({})
+  const serversRef = useRef<Server[]>([])
 
-  // Block tab close / browser navigation while connected
+  // Load servers
+  useEffect(() => {
+    getServers().then((servers) => {
+      serversRef.current = servers
+    })
+  }, [])
+
+  // Initialize first tab from URL
+  useEffect(() => {
+    if (!id) return
+    const serverId = Number(id)
+
+    getServers().then((servers) => {
+      serversRef.current = servers
+      const s = servers.find((sv) => sv.id === serverId)
+      if (!s) {
+        setNotFound(true)
+        return
+      }
+
+      const tabId = generateTabId()
+      const newTab: TabState = {
+        id: tabId,
+        serverId,
+        server: s,
+        connected: false,
+        elapsed: 0,
+        recording: false,
+        recordingId: null,
+        termSize: { cols: 80, rows: 24 },
+      }
+      setTabs([newTab])
+      setActiveTabId(tabId)
+    })
+  }, [id])
+
+  // Block tab close while connected
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (connectedRef.current) {
+      if (tabs.some((t) => t.connected)) {
         e.preventDefault()
       }
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [])
+  }, [tabs])
 
-  // Keep ref in sync with state
+  // Keyboard shortcuts for tab management
   useEffect(() => {
-    connectedRef.current = connected
-  }, [connected])
-
-  // Main mount effect
-  useEffect(() => {
-    if (!id) return
-
-    const serverId = Number(id)
-
-    getServers().then((servers) => {
-      const s = servers.find((sv) => sv.id === serverId)
-      if (s) {
-        setServer(s)
-      } else {
-        setNotFound(true)
-      }
-    })
-
-    const term = new XTerm({
-      cursorBlink: true,
-      fontFamily: 'JetBrains Mono, Consolas, monospace',
-      fontSize: 14,
-      lineHeight: 1.2,
-      allowProposedApi: true,
-      rightClickSelectsWord: true,
-      theme: {
-        background: '#06090f',
-        foreground: '#e8edf5',
-        cursor: '#22c55e',
-        selectionBackground: 'rgba(59, 130, 246, 0.3)',
-        black: '#06090f',
-        red: '#ef4444',
-        green: '#22c55e',
-        yellow: '#f59e0b',
-        blue: '#3b82f6',
-        magenta: '#a855f7',
-        cyan: '#06b6d4',
-        white: '#e8edf5',
-      },
-    })
-
-    const fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
-    term.loadAddon(new WebLinksAddon())
-
-    if (terminalRef.current) {
-      term.open(terminalRef.current)
-      requestAnimationFrame(() => fitAddon.fit())
-
-      // Right-click paste
-      terminalRef.current.addEventListener('contextmenu', (e) => {
+    const handler = (e: KeyboardEvent) => {
+      // Ctrl+T: new tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 't') {
         e.preventDefault()
-        const sel = term.getSelection()
-        if (sel) {
-          navigator.clipboard.writeText(sel)
-          term.clearSelection()
-        } else {
-          navigator.clipboard.readText().then(text => {
-            if (ws.readyState === WebSocket.OPEN) {
-              ws.send(new TextEncoder().encode(text))
-            }
-          })
+        setShowServerPicker(true)
+        return
+      }
+      // Ctrl+W: close tab
+      if ((e.ctrlKey || e.metaKey) && e.key === 'w') {
+        e.preventDefault()
+        if (activeTabId) {
+          handleCloseTab(activeTabId)
         }
-      })
-    }
-
-    const ws = createTerminalSocket(serverId)
-    ws.binaryType = 'arraybuffer'
-
-    ws.onopen = () => {
-      setConnected(true)
-      timerRef.current = setInterval(() => {
-        setElapsed((e) => e + 1)
-      }, 1000)
-      sendResize(ws, term.cols, term.rows)
-    }
-
-    ws.onmessage = (event: MessageEvent) => {
-      term.write(new Uint8Array(event.data as ArrayBuffer))
-    }
-
-    ws.onclose = () => {
-      setConnected(false)
-      if (timerRef.current) clearInterval(timerRef.current)
-      term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n')
-      setShowDisconnectModal(true)
-    }
-
-    ws.onerror = () => {
-      term.write('\r\n\x1b[31mConnection error.\x1b[0m\r\n')
-    }
-
-    term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(new TextEncoder().encode(data))
+        return
       }
-    })
-
-    // Ctrl+Shift+C to copy selection, Ctrl+Shift+V to paste
-    term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
-      if (e.type !== 'keydown') return true
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
-        const sel = term.getSelection()
-        if (sel) navigator.clipboard.writeText(sel)
-        return false
+      // Ctrl+1-9: switch tabs
+      if ((e.ctrlKey || e.metaKey) && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const idx = parseInt(e.key) - 1
+        if (idx < tabs.length) {
+          setActiveTabId(tabs[idx].id)
+        }
+        return
       }
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'V') {
-        navigator.clipboard.readText().then(text => {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(new TextEncoder().encode(text))
-          }
-        })
-        return false
-      }
-      return true
-    })
-
-    term.onResize(({ cols, rows }) => {
-      sendResize(ws, cols, rows)
-      setTermSize({ cols, rows })
-    })
-
-    xtermRef.current = term
-    wsRef.current = ws
-    fitAddonRef.current = fitAddon
-
-    const handleResize = () => fitAddon.fit()
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      if (timerRef.current) clearInterval(timerRef.current)
-      ws.close()
-      term.dispose()
     }
-  }, [id])
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [activeTabId, tabs])
 
-  // Re-fit terminal when panel toggles
-  useEffect(() => {
-    const timeout = setTimeout(() => fitAddonRef.current?.fit(), 0)
-    return () => clearTimeout(timeout)
-  }, [showPanel])
+  const handleConnected = useCallback((tabId: string) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, connected: true } : t))
+    )
+    // Start timer
+    timerRefs.current[tabId] = setInterval(() => {
+      setTabs((prev) =>
+        prev.map((t) => (t.id === tabId ? { ...t, elapsed: t.elapsed + 1 } : t))
+      )
+    }, 1000)
+  }, [])
 
-  const handlePaste = useCallback((text: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(new TextEncoder().encode(text))
+  const handleDisconnected = useCallback((tabId: string) => {
+    setTabs((prev) => {
+      const updated = prev.map((t) =>
+        t.id === tabId ? { ...t, connected: false, recording: false } : t
+      )
+      const tab = updated.find((t) => t.id === tabId)
+      if (tab) {
+        setDisconnectedTab(tab)
+        setShowDisconnectModal(true)
+      }
+      return updated
+    })
+    if (timerRefs.current[tabId]) {
+      clearInterval(timerRefs.current[tabId])
+      delete timerRefs.current[tabId]
     }
   }, [])
+
+  const handleRecordingStarted = useCallback((tabId: string, recId: number) => {
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === tabId ? { ...t, recording: true, recordingId: recId } : t
+      )
+    )
+  }, [])
+
+  const handleRecordingStopped = useCallback((tabId: string) => {
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === tabId ? { ...t, recording: false, recordingId: null } : t
+      )
+    )
+  }, [])
+
+  const handleTermSize = useCallback((tabId: string, cols: number, rows: number) => {
+    setTabs((prev) =>
+      prev.map((t) => (t.id === tabId ? { ...t, termSize: { cols, rows } } : t))
+    )
+  }, [])
+
+  const handleNewTab = useCallback(() => {
+    setShowServerPicker(true)
+  }, [])
+
+  const handleServerSelect = useCallback((server: Server) => {
+    const tabId = generateTabId()
+    const newTab: TabState = {
+      id: tabId,
+      serverId: server.id,
+      server,
+      connected: false,
+      elapsed: 0,
+      recording: false,
+      recordingId: null,
+      termSize: { cols: 80, rows: 24 },
+    }
+    setTabs((prev) => [...prev, newTab])
+    setActiveTabId(tabId)
+    setShowServerPicker(false)
+  }, [])
+
+  const handleCloseTab = useCallback(
+    (tabId: string) => {
+      const tab = tabs.find((t) => t.id === tabId)
+      if (tab?.connected) {
+        const confirmed = window.confirm(
+          `"${tab.server?.name}" is still connected. Close anyway?`
+        )
+        if (!confirmed) return
+      }
+
+      // Disconnect via DOM
+      const el = document.querySelector(`[data-tab-id="${tabId}"]`)
+      if (el) {
+        (el as any).__disconnect?.()
+      }
+
+      if (timerRefs.current[tabId]) {
+        clearInterval(timerRefs.current[tabId])
+        delete timerRefs.current[tabId]
+      }
+
+      setTabs((prev) => {
+        const newTabs = prev.filter((t) => t.id !== tabId)
+        if (activeTabId === tabId && newTabs.length > 0) {
+          setActiveTabId(newTabs[newTabs.length - 1].id)
+        }
+        if (newTabs.length === 0) {
+          navigate('/')
+        }
+        return newTabs
+      })
+    },
+    [tabs, activeTabId, navigate]
+  )
+
+  const handleSelectTab = useCallback((tabId: string) => {
+    setActiveTabId(tabId)
+  }, [])
+
+  const handleToggleRecording = useCallback((tabId: string) => {
+    const el = document.querySelector(`[data-tab-id="${tabId}"]`)
+    if (el) {
+      (el as any).__toggleRecording?.()
+    }
+  }, [])
+
+  const handlePaste = useCallback(
+    (text: string) => {
+      const el = document.querySelector(`[data-tab-id="${activeTabId}"]`)
+      if (el) {
+        (el as any).__pasteText?.(text)
+      }
+    },
+    [activeTabId]
+  )
 
   const handleDisconnect = useCallback(() => {
-    wsRef.current?.close()
-  }, [])
+    const el = document.querySelector(`[data-tab-id="${activeTabId}"]`)
+    if (el) {
+      (el as any).__disconnect?.()
+    }
+  }, [activeTabId])
 
   const handleBack = useCallback(() => {
     navigate('/')
   }, [navigate])
+
+  const activeTab = tabs.find((t) => t.id === activeTabId)
 
   if (notFound) {
     return (
@@ -221,51 +281,100 @@ export default function TerminalPage() {
     )
   }
 
+  const tabInfos: TabInfo[] = tabs.map((t) => ({
+    id: t.id,
+    serverId: t.serverId,
+    serverName: t.server?.name ?? 'Connecting...',
+    connected: t.connected,
+    recording: t.recording,
+  }))
+
   return (
     <div className="flex flex-col h-screen bg-surface-900">
       {/* Connection bar */}
       <ConnectionBar
-        server={server}
-        connected={connected}
-        elapsed={elapsed}
+        server={activeTab?.server ?? null}
+        connected={activeTab?.connected ?? false}
+        elapsed={activeTab?.elapsed ?? 0}
+        recording={activeTab?.recording ?? false}
         onDisconnect={handleDisconnect}
         onBack={handleBack}
+        onToggleRecording={() => activeTab && handleToggleRecording(activeTab.id)}
       />
+
+      {/* Tab bar (only show if more than 1 tab) */}
+      {tabs.length > 0 && (
+        <TabBar
+          tabs={tabInfos}
+          activeTabId={activeTabId}
+          onSelectTab={handleSelectTab}
+          onCloseTab={handleCloseTab}
+          onNewTab={handleNewTab}
+        />
+      )}
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0 relative">
-        {/* Terminal area */}
+        {/* Terminal tabs area */}
         <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-          <div ref={terminalRef} className="flex-1 min-h-0 p-1 overflow-hidden" />
+          <div className="flex-1 flex min-h-0 relative">
+            {tabs.map((tab) => (
+              <TerminalTab
+                key={tab.id}
+                serverId={tab.serverId}
+                tabId={tab.id}
+                active={tab.id === activeTabId}
+                onConnected={handleConnected}
+                onDisconnected={handleDisconnected}
+                onRecordingStarted={handleRecordingStarted}
+                onRecordingStopped={handleRecordingStopped}
+                onTermSize={handleTermSize}
+                onElapsedTick={() => {}}
+                recording={tab.recording}
+              />
+            ))}
+          </div>
 
           {/* Status bar */}
-          <div className="flex items-center justify-between bg-surface-800 border-t border-border px-4 py-1">
-            <div className="flex items-center gap-3 text-xs font-mono text-text-muted">
-              <span className="flex items-center gap-1.5">
-                <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-accent-green' : 'bg-accent-red'}`} />
-                SSH
-              </span>
-              {server && (
-                <span>
-                  {server.username}@{server.host}
+          {activeTab && (
+            <div className="flex items-center justify-between bg-surface-800 border-t border-border px-4 py-1">
+              <div className="flex items-center gap-3 text-xs font-mono text-text-muted">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={`w-1.5 h-1.5 rounded-full ${
+                      activeTab.connected ? 'bg-accent-green' : 'bg-accent-red'
+                    }`}
+                  />
+                  SSH
                 </span>
-              )}
-              <span>UTF-8</span>
+                {activeTab.server && (
+                  <span>
+                    {activeTab.server.username}@{activeTab.server.host}
+                  </span>
+                )}
+                <span>UTF-8</span>
+                {activeTab.recording && (
+                  <span className="flex items-center gap-1 text-red-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    REC
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-xs font-mono text-text-muted">
+                <span>
+                  {activeTab.termSize.cols} x {activeTab.termSize.rows}
+                </span>
+                <span>{formatTime(activeTab.elapsed)}</span>
+              </div>
             </div>
-            <div className="flex items-center gap-3 text-xs font-mono text-text-muted">
-              <span>
-                {termSize.cols} x {termSize.rows}
-              </span>
-              <span>{formatTime(elapsed)}</span>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Command panel */}
-        {showPanel && connected && (
+        {showPanel && activeTab?.connected && (
           <div className="relative z-10 flex-shrink-0 h-full">
             <CommandPanel
-              server={server}
+              server={activeTab.server}
               onPasteToTerminal={handlePaste}
               onClose={() => setShowPanel(false)}
             />
@@ -273,7 +382,7 @@ export default function TerminalPage() {
         )}
 
         {/* Panel toggle button when closed */}
-        {!showPanel && connected && (
+        {!showPanel && activeTab?.connected && (
           <button
             onClick={() => setShowPanel(true)}
             className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-surface-800 border border-border border-r-0 rounded-l-md px-1.5 py-3 text-text-muted hover:text-text-primary transition-colors"
@@ -292,30 +401,62 @@ export default function TerminalPage() {
         )}
       </div>
 
+      {/* Server picker modal */}
+      {showServerPicker && (
+        <ServerPicker
+          onSelect={handleServerSelect}
+          onClose={() => setShowServerPicker(false)}
+        />
+      )}
+
       {/* Disconnect modal */}
-      {showDisconnectModal && (
+      {showDisconnectModal && disconnectedTab && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-surface-800 border border-border rounded-xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
             <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-accent-red-bg border border-accent-red-dim flex items-center justify-center">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M18 6L6 18M6 6l12 12" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" />
+                <path
+                  d="M18 6L6 18M6 6l12 12"
+                  stroke="#ef4444"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-text-primary mb-2">Session Ended</h3>
+            <h3 className="text-lg font-semibold text-text-primary mb-2">
+              Session Ended
+            </h3>
             <p className="text-sm text-text-muted mb-2">
-              {server?.name && (
-                <span className="text-text-secondary font-medium">{server.name}</span>
+              {disconnectedTab.server?.name && (
+                <span className="text-text-secondary font-medium">
+                  {disconnectedTab.server.name}
+                </span>
               )}
             </p>
             <p className="text-xs text-text-muted mb-6">
-              Session lasted {formatTime(elapsed)}
+              Session lasted {formatTime(disconnectedTab.elapsed)}
             </p>
-            <button
-              onClick={handleBack}
-              className="w-full px-4 py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
-            >
-              Back to Dashboard
-            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDisconnectModal(false)}
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-surface-700 text-text-primary hover:bg-surface-600 transition-colors"
+              >
+                Keep Tab
+              </button>
+              <button
+                onClick={() => {
+                  setShowDisconnectModal(false)
+                  if (tabs.length <= 1) {
+                    handleBack()
+                  } else {
+                    handleCloseTab(disconnectedTab.id)
+                  }
+                }}
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+              >
+                {tabs.length <= 1 ? 'Back to Dashboard' : 'Close Tab'}
+              </button>
+            </div>
           </div>
         </div>
       )}

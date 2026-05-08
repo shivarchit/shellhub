@@ -53,6 +53,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/global-commands", h.createGlobalCommand)
 	mux.HandleFunc("PUT /api/global-commands/{id}", h.updateGlobalCommand)
 	mux.HandleFunc("DELETE /api/global-commands/{id}", h.deleteGlobalCommand)
+	mux.HandleFunc("GET /api/recordings", h.listRecordings)
+	mux.HandleFunc("GET /api/recordings/{id}", h.getRecording)
+	mux.HandleFunc("DELETE /api/recordings/{id}", h.deleteRecording)
 }
 
 func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
@@ -565,4 +568,48 @@ func readJSON(r *http.Request, dst any) error {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func (h *Handler) listRecordings(w http.ResponseWriter, r *http.Request) {
+	recordings, err := h.store.ListRecordings(100)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, recordings)
+}
+
+func (h *Handler) getRecording(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, 400, "invalid recording id")
+		return
+	}
+	rec, err := h.store.GetRecording(id)
+	if err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			writeError(w, 404, "recording not found")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, rec)
+}
+
+func (h *Handler) deleteRecording(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, 400, "invalid recording id")
+		return
+	}
+	if err := h.store.DeleteRecording(id); err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			writeError(w, 404, "recording not found")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	w.WriteHeader(204)
 }

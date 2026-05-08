@@ -2,11 +2,14 @@ package terminal
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sarchitt/shellhub/internal/auth"
@@ -22,6 +25,10 @@ type resizeMessage struct {
 	Type string `json:"type"`
 	Cols int    `json:"cols"`
 	Rows int    `json:"rows"`
+}
+
+type recordMessage struct {
+	Type string `json:"type"`
 }
 
 type Handler struct {
@@ -101,6 +108,85 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.store.LogAudit("terminal_disconnect", &id, srv.Name)
 	}()
 
+	// Recording state
+	var recMu sync.Mutex
+	var recording bool
+	var recID int
+	var recStart time.Time
+	var recBuf strings.Builder
+
+	startRecording := func(cols, rows int) {
+		recMu.Lock()
+		defer recMu.Unlock()
+		if recording {
+			return
+		}
+		rid, err := h.store.CreateRecording(id, srv.Name, cols, rows)
+		if err != nil {
+			log.Printf("failed to create recording: %v", err)
+			return
+		}
+		recID = rid
+		recStart = time.Now()
+		recBuf.Reset()
+		// Write asciicast v2 header
+		header := fmt.Sprintf(`{"version":2,"width":%d,"height":%d,"timestamp":%d,"title":"%s"}`, cols, rows, recStart.Unix(), srv.Name)
+		recBuf.WriteString(header)
+		recBuf.WriteString("\n")
+		recording = true
+		// Notify client
+		wsConn.WriteMessage(websocket.TextMessage, []byte(`{"type":"recording_started","id":`+strconv.Itoa(rid)+`}`))
+	}
+
+	stopRecording := func() {
+		recMu.Lock()
+		defer recMu.Unlock()
+		if !recording {
+			return
+		}
+		recording = false
+		// Flush buffer to DB
+		if recBuf.Len() > 0 {
+			h.store.AppendRecordingData(recID, recBuf.String())
+			recBuf.Reset()
+		}
+		h.store.EndRecording(recID)
+		// Notify client
+		wsConn.WriteMessage(websocket.TextMessage, []byte(`{"type":"recording_stopped","id":`+strconv.Itoa(recID)+`}`))
+	}
+
+	appendOutput := func(data []byte) {
+		recMu.Lock()
+		defer recMu.Unlock()
+		if !recording {
+			return
+		}
+		elapsed := time.Since(recStart).Seconds()
+		// Escape the data for JSON
+		escaped, _ := json.Marshal(string(data))
+		line := fmt.Sprintf("[%.6f, \"o\", %s]", elapsed, string(escaped))
+		recBuf.WriteString(line)
+		recBuf.WriteString("\n")
+		// Flush periodically (every 64KB)
+		if recBuf.Len() > 65536 {
+			h.store.AppendRecordingData(recID, recBuf.String())
+			recBuf.Reset()
+		}
+	}
+
+	appendInput := func(data []byte) {
+		recMu.Lock()
+		defer recMu.Unlock()
+		if !recording {
+			return
+		}
+		elapsed := time.Since(recStart).Seconds()
+		escaped, _ := json.Marshal(string(data))
+		line := fmt.Sprintf("[%.6f, \"i\", %s]", elapsed, string(escaped))
+		recBuf.WriteString(line)
+		recBuf.WriteString("\n")
+	}
+
 	var once sync.Once
 	done := make(chan struct{})
 	closeDone := func() { once.Do(func() { close(done) }) }
@@ -112,7 +198,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for {
 			n, err := session.Read(buf)
 			if n > 0 {
-				if writeErr := wsConn.WriteMessage(websocket.BinaryMessage, buf[:n]); writeErr != nil {
+				data := buf[:n]
+				appendOutput(data)
+				if writeErr := wsConn.WriteMessage(websocket.BinaryMessage, data); writeErr != nil {
 					return
 				}
 			}
@@ -139,10 +227,26 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					session.Resize(resize.Cols, resize.Rows)
 					continue
 				}
+				var rec recordMessage
+				if json.Unmarshal(msg, &rec) == nil {
+					if rec.Type == "start_recording" {
+						// Get current terminal size from the resize data or use defaults
+						cols, rows := 80, 24
+						startRecording(cols, rows)
+						continue
+					}
+					if rec.Type == "stop_recording" {
+						stopRecording()
+						continue
+					}
+				}
 			}
+			appendInput(msg)
 			session.Write(msg)
 		}
 	}()
 
 	<-done
+	// Stop recording on disconnect
+	stopRecording()
 }

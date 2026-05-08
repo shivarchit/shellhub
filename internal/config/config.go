@@ -166,6 +166,24 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS session_recordings (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			server_id INTEGER NOT NULL,
+			server_name TEXT NOT NULL DEFAULT '',
+			started_at TEXT NOT NULL DEFAULT (datetime('now')),
+			ended_at TEXT,
+			duration_seconds INTEGER DEFAULT 0,
+			data TEXT NOT NULL DEFAULT '',
+			cols INTEGER NOT NULL DEFAULT 80,
+			rows INTEGER NOT NULL DEFAULT 24,
+			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Add new columns for key-based auth (harmlessly errors if columns already exist)
 	s := &Store{db: db}
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
@@ -649,4 +667,98 @@ func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// --- Session Recordings ---
+
+type SessionRecording struct {
+	ID              int     `json:"id"`
+	ServerID        int     `json:"server_id"`
+	ServerName      string  `json:"server_name"`
+	StartedAt       string  `json:"started_at"`
+	EndedAt         *string `json:"ended_at"`
+	DurationSeconds int     `json:"duration_seconds"`
+	Data            string  `json:"data,omitempty"`
+	Cols            int     `json:"cols"`
+	Rows            int     `json:"rows"`
+}
+
+func (s *Store) CreateRecording(serverID int, serverName string, cols, rows int) (int, error) {
+	res, err := s.db.Exec(
+		`INSERT INTO session_recordings (server_id, server_name, cols, rows) VALUES (?, ?, ?, ?)`,
+		serverID, serverName, cols, rows,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	return int(id), nil
+}
+
+func (s *Store) AppendRecordingData(id int, data string) error {
+	_, err := s.db.Exec(
+		`UPDATE session_recordings SET data = data || ? WHERE id = ?`,
+		data, id,
+	)
+	return err
+}
+
+func (s *Store) EndRecording(id int) error {
+	_, err := s.db.Exec(
+		`UPDATE session_recordings SET
+			ended_at = datetime('now'),
+			duration_seconds = CAST((julianday(datetime('now')) - julianday(started_at)) * 86400 AS INTEGER)
+		WHERE id = ?`, id,
+	)
+	return err
+}
+
+func (s *Store) GetRecording(id int) (*SessionRecording, error) {
+	var rec SessionRecording
+	err := s.db.QueryRow(
+		`SELECT id, server_id, server_name, started_at, ended_at, duration_seconds, data, cols, rows
+		 FROM session_recordings WHERE id = ?`, id,
+	).Scan(&rec.ID, &rec.ServerID, &rec.ServerName, &rec.StartedAt, &rec.EndedAt, &rec.DurationSeconds, &rec.Data, &rec.Cols, &rec.Rows)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return &rec, nil
+}
+
+func (s *Store) ListRecordings(limit int) ([]SessionRecording, error) {
+	rows, err := s.db.Query(
+		`SELECT id, server_id, server_name, started_at, ended_at, duration_seconds, cols, rows
+		 FROM session_recordings ORDER BY id DESC LIMIT ?`, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var recordings []SessionRecording
+	for rows.Next() {
+		var rec SessionRecording
+		if err := rows.Scan(&rec.ID, &rec.ServerID, &rec.ServerName, &rec.StartedAt, &rec.EndedAt, &rec.DurationSeconds, &rec.Cols, &rec.Rows); err != nil {
+			return nil, err
+		}
+		recordings = append(recordings, rec)
+	}
+	if recordings == nil {
+		recordings = []SessionRecording{}
+	}
+	return recordings, rows.Err()
+}
+
+func (s *Store) DeleteRecording(id int) error {
+	res, err := s.db.Exec(`DELETE FROM session_recordings WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

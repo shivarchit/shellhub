@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording } from './types'
 
 const BASE = '/api'
 
@@ -111,3 +111,13 @@ export const exportExecHistoryCSV = (filter: ExecHistoryFilter) => {
   if (filter.date_to) params.set('date_to', filter.date_to)
   window.open(`/api/exec-history/export?${params.toString()}`, '_blank')
 }
+
+// Recordings
+export const getRecordings = () =>
+  request<SessionRecording[]>('/recordings')
+
+export const getRecording = (id: number) =>
+  request<SessionRecording>(`/recordings/${id}`)
+
+export const deleteRecording = (id: number) =>
+  request<void>(`/recordings/${id}`, { method: 'DELETE' })
