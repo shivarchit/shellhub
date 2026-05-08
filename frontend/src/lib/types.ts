@@ -55,3 +55,15 @@ export interface AuditEntry {
   details: string
   created_at: string
 }
+
+export interface SessionRecording {
+  id: number
+  server_id: number
+  server_name: string
+  started_at: string
+  ended_at: string | null
+  duration_seconds: number
+  data?: string
+  cols: number
+  rows: number
+}

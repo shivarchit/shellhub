@@ -279,7 +279,17 @@ export default function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 border-t border-border space-y-2">
+        <button
+          onClick={() => navigate('/recordings')}
+          className="w-full py-2 text-sm text-text-muted flex items-center justify-center gap-2 border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+            <circle cx="8" cy="8" r="2.5" fill="currentColor" />
+          </svg>
+          Recordings
+        </button>
         <button
           onClick={onAdd}
           className="w-full py-2 text-sm text-text-secondary border border-dashed border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"

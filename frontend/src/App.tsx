@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Terminal from './pages/Terminal'
 import Settings from './pages/Settings'
+import Recordings from './pages/Recordings'
 import ToastProvider from './components/ToastProvider'
 
 export default function App() {
@@ -11,6 +12,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/terminal/:id" element={<Terminal />} />
+          <Route path="/recordings" element={<Recordings />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

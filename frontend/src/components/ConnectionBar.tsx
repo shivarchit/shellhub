@@ -6,8 +6,10 @@ interface ConnectionBarProps {
   server: Server | null
   connected: boolean
   elapsed: number
+  recording?: boolean
   onDisconnect: () => void
   onBack: () => void
+  onToggleRecording?: () => void
 }
 
 function formatTime(totalSeconds: number): string {
@@ -21,8 +23,10 @@ export default function ConnectionBar({
   server,
   connected,
   elapsed,
+  recording = false,
   onDisconnect,
   onBack,
+  onToggleRecording,
 }: ConnectionBarProps) {
   return (
     <div className="flex items-center justify-between bg-surface-800 border-b border-border px-5 py-2.5">
@@ -82,10 +86,32 @@ export default function ConnectionBar({
         <span className="text-xs font-mono text-text-secondary">
           {formatTime(elapsed)}
         </span>
+
+        {/* Recording indicator */}
+        {recording && (
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30">
+            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            Recording
+          </div>
+        )}
       </div>
 
       {/* Right section */}
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
+        {connected && onToggleRecording && (
+          <button
+            onClick={onToggleRecording}
+            className={cn(
+              'px-3 py-1.5 text-xs font-medium rounded-md border transition-colors',
+              recording
+                ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                : 'bg-surface-700 text-text-secondary border-border hover:bg-surface-600'
+            )}
+          >
+            {recording ? 'Stop Recording' : 'Record'}
+          </button>
+        )}
+
         {connected ? (
           <button
             onClick={onDisconnect}
