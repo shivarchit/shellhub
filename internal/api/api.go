@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -42,10 +43,16 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
 	mux.HandleFunc("GET /api/servers/{id}/exec-history", h.getExecHistory)
 	mux.HandleFunc("GET /api/audit-log", h.getAuditLog)
+	mux.HandleFunc("GET /api/exec-history", h.getAllExecHistory)
+	mux.HandleFunc("GET /api/exec-history/export", h.exportExecHistory)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
 	mux.HandleFunc("GET /api/export", h.exportData)
 	mux.HandleFunc("POST /api/import", h.importData)
+	mux.HandleFunc("GET /api/global-commands", h.listGlobalCommands)
+	mux.HandleFunc("POST /api/global-commands", h.createGlobalCommand)
+	mux.HandleFunc("PUT /api/global-commands/{id}", h.updateGlobalCommand)
+	mux.HandleFunc("DELETE /api/global-commands/{id}", h.deleteGlobalCommand)
 }
 
 func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
@@ -219,21 +226,24 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
+	start := time.Now()
 	output, exitCode, err := h.executor.Execute(*srv, body.Command)
+	durationMs := int(time.Since(start).Milliseconds())
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
 	}
 	h.store.LogExec(config.ExecRecord{
 		ServerID:    id,
+		ServerName:  srv.Name,
 		CommandName: body.Command,
 		CommandText: body.Command,
 		Output:      output,
 		ExitCode:    exitCode,
-		DurationMs:  0,
+		DurationMs:  durationMs,
 	})
 	h.store.LogAudit("command_exec", &id, body.Command)
-	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode})
+	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode, "duration_ms": durationMs})
 }
 
 // decryptServerCredentials decrypts password and private_key in place.
@@ -384,6 +394,158 @@ func (h *Handler) getAuditLog(w http.ResponseWriter, r *http.Request) {
 		entries = []config.AuditEntry{}
 	}
 	writeJSON(w, 200, entries)
+}
+
+func (h *Handler) listGlobalCommands(w http.ResponseWriter, r *http.Request) {
+	cmds, err := h.store.GetGlobalCommands()
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, cmds)
+}
+
+func (h *Handler) createGlobalCommand(w http.ResponseWriter, r *http.Request) {
+	var cmd config.GlobalCommand
+	if err := readJSON(r, &cmd); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	id, err := h.store.AddGlobalCommand(cmd)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	cmd.ID = id
+	h.store.LogAudit("global_command_create", nil, cmd.Name)
+	writeJSON(w, 201, cmd)
+}
+
+func (h *Handler) updateGlobalCommand(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, 400, "invalid id")
+		return
+	}
+	var cmd config.GlobalCommand
+	if err := readJSON(r, &cmd); err != nil {
+		writeError(w, 400, err.Error())
+		return
+	}
+	if err := h.store.UpdateGlobalCommand(id, cmd); err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			writeError(w, 404, "global command not found")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	cmd.ID = id
+	h.store.LogAudit("global_command_update", nil, cmd.Name)
+	writeJSON(w, 200, cmd)
+}
+
+func (h *Handler) deleteGlobalCommand(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(r)
+	if err != nil {
+		writeError(w, 400, "invalid id")
+		return
+	}
+	if err := h.store.DeleteGlobalCommand(id); err != nil {
+		if errors.Is(err, config.ErrNotFound) {
+			writeError(w, 404, "global command not found")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	h.store.LogAudit("global_command_delete", nil, "")
+	w.WriteHeader(204)
+}
+
+func (h *Handler) getAllExecHistory(w http.ResponseWriter, r *http.Request) {
+	filter := config.ExecHistoryFilter{
+		Limit:  50,
+		Offset: 0,
+	}
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil {
+			filter.Limit = v
+		}
+	}
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if v, err := strconv.Atoi(o); err == nil {
+			filter.Offset = v
+		}
+	}
+	if sid := r.URL.Query().Get("server_id"); sid != "" {
+		if v, err := strconv.Atoi(sid); err == nil {
+			filter.ServerID = &v
+		}
+	}
+	if s := r.URL.Query().Get("search"); s != "" {
+		filter.Search = s
+	}
+	if ec := r.URL.Query().Get("exit_code"); ec != "" {
+		if v, err := strconv.Atoi(ec); err == nil {
+			filter.ExitCode = &v
+		}
+	}
+	if df := r.URL.Query().Get("date_from"); df != "" {
+		filter.DateFrom = df
+	}
+	if dt := r.URL.Query().Get("date_to"); dt != "" {
+		filter.DateTo = dt
+	}
+
+	page, err := h.store.GetAllExecHistory(filter)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, page)
+}
+
+func (h *Handler) exportExecHistory(w http.ResponseWriter, r *http.Request) {
+	filter := config.ExecHistoryFilter{
+		Limit:  100000,
+		Offset: 0,
+	}
+	if sid := r.URL.Query().Get("server_id"); sid != "" {
+		if v, err := strconv.Atoi(sid); err == nil {
+			filter.ServerID = &v
+		}
+	}
+	if s := r.URL.Query().Get("search"); s != "" {
+		filter.Search = s
+	}
+	if ec := r.URL.Query().Get("exit_code"); ec != "" {
+		if v, err := strconv.Atoi(ec); err == nil {
+			filter.ExitCode = &v
+		}
+	}
+	if df := r.URL.Query().Get("date_from"); df != "" {
+		filter.DateFrom = df
+	}
+	if dt := r.URL.Query().Get("date_to"); dt != "" {
+		filter.DateTo = dt
+	}
+
+	page, err := h.store.GetAllExecHistory(filter)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/csv")
+	w.Header().Set("Content-Disposition", `attachment; filename="shellhub-audit.csv"`)
+	// CSV header
+	w.Write([]byte("ID,Server ID,Server Name,Command,Exit Code,Duration (ms),Executed At\n"))
+	for _, r := range page.Records {
+		line := fmt.Sprintf("%d,%d,%q,%q,%d,%d,%s\n",
+			r.ID, r.ServerID, r.ServerName, r.CommandText, r.ExitCode, r.DurationMs, r.ExecutedAt)
+		w.Write([]byte(line))
+	}
 }
 
 func parseID(r *http.Request) (int, error) {

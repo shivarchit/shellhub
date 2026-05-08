@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Server, ExecResult, QuickCommand, ConnectionRecord, ExecRecord } from '../lib/types'
-import { getConnectionHistory, getExecHistory } from '../lib/api'
+import type { Server, ExecResult, QuickCommand, ConnectionRecord, ExecRecord, GlobalCommand } from '../lib/types'
+import { getConnectionHistory, getExecHistory, getGlobalCommands } from '../lib/api'
 import { cn } from '../lib/utils'
 import StatusDot from './StatusDot'
 import CommandCard from './CommandCard'
@@ -36,6 +36,7 @@ export default function ServerDetail({
 }: ServerDetailProps) {
   const [lastConnected, setLastConnected] = useState<ConnectionRecord | null>(null)
   const [execHistory, setExecHistory] = useState<ExecRecord[]>([])
+  const [globalCommands, setGlobalCommands] = useState<GlobalCommand[]>([])
 
   useEffect(() => {
     getConnectionHistory(server.id)
@@ -46,6 +47,9 @@ export default function ServerDetail({
     getExecHistory(server.id)
       .then(setExecHistory)
       .catch(() => setExecHistory([]))
+    getGlobalCommands()
+      .then(setGlobalCommands)
+      .catch(() => setGlobalCommands([]))
   }, [server.id])
 
   const handleDelete = () => {
@@ -154,6 +158,7 @@ export default function ServerDetail({
                 key={`${cmd.name}-${i}`}
                 command={cmd}
                 serverId={server.id}
+                server={server}
                 onExecComplete={onExecComplete}
               />
             ))}
@@ -164,6 +169,31 @@ export default function ServerDetail({
           </div>
         )}
       </div>
+
+      {/* Global Commands */}
+      {globalCommands.length > 0 && (
+        <div className="mt-8">
+          <h2 className="text-lg font-semibold text-text-primary mb-4">
+            Global Commands
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {globalCommands.map((gc) => (
+              <CommandCard
+                key={`global-${gc.id}`}
+                command={{
+                  name: gc.name,
+                  command: gc.command,
+                  tag: gc.tag,
+                  is_template: gc.is_template,
+                }}
+                serverId={server.id}
+                server={server}
+                onExecComplete={onExecComplete}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Recent Executions */}
       {execHistory.length > 0 && (

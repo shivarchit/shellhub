@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import Terminal from './pages/Terminal'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
+import Audit from './pages/Audit'
 import ToastProvider from './components/ToastProvider'
 import { AuthProvider, useAuth } from './lib/auth'
 
@@ -31,6 +32,7 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/terminal/:id" element={<ProtectedRoute><Terminal /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/audit" element={<ProtectedRoute><Audit /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

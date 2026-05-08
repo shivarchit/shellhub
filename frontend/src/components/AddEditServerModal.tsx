@@ -11,7 +11,7 @@ interface AddEditServerModalProps {
 }
 
 function emptyCommand(): QuickCommand {
-  return { name: '', command: '', tag: '' }
+  return { name: '', command: '', tag: '', is_template: false }
 }
 
 export default function AddEditServerModal({
@@ -91,7 +91,7 @@ export default function AddEditServerModal({
   const updateCommand = (
     index: number,
     field: keyof QuickCommand,
-    value: string
+    value: string | boolean
   ) => {
     setCommands((prev) =>
       prev.map((c, i) => (i === index ? { ...c, [field]: value } : c))
@@ -346,7 +346,7 @@ export default function AddEditServerModal({
                         onChange={(e) =>
                           updateCommand(i, 'command', e.target.value)
                         }
-                        placeholder="command --flag"
+                        placeholder="command --flag or {{variable}} template"
                         className={`${inputClass} font-mono`}
                       />
                       <button
@@ -357,6 +357,15 @@ export default function AddEditServerModal({
                         &times;
                       </button>
                     </div>
+                    <label className="flex items-center gap-2 text-xs text-text-muted cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={cmd.is_template ?? false}
+                        onChange={(e) => updateCommand(i, 'is_template', e.target.checked)}
+                        className="accent-accent-blue"
+                      />
+                      Template (uses {'{{variables}}'})
+                    </label>
                   </div>
                 ))}
               </div>

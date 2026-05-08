@@ -9,7 +9,9 @@
       "Edit",
       "Bash(npm *)",
       "Bash(go *)",
-      "Bash(cd *)"
+      "Bash(cd *)",
+      "Bash(git merge *)",
+      "Bash(git commit *)"
     ]
   }
 }

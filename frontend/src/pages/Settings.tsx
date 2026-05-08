@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts } from '../lib/api'
-import type { AuditEntry, LoginAttempt } from '../lib/types'
+import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand } from '../lib/api'
+import type { AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput } from '../lib/types'
 import { useAuth } from '../lib/auth'
 
 export default function Settings() {
@@ -16,7 +16,13 @@ export default function Settings() {
   const [importResult, setImportResult] = useState('')
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([])
-  const [activeTab, setActiveTab] = useState<'general' | 'security'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'commands' | 'security'>('general')
+  const [globalCmds, setGlobalCmds] = useState<GlobalCommand[]>([])
+  const [editingGlobal, setEditingGlobal] = useState<GlobalCommand | null>(null)
+  const [showGlobalForm, setShowGlobalForm] = useState(false)
+  const [globalForm, setGlobalForm] = useState<GlobalCommandInput>({
+    name: '', command: '', tag: '', description: '', is_template: false, sort_order: 0,
+  })
 
   const actionColors: Record<string, string> = {
     server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
@@ -25,6 +31,10 @@ export default function Settings() {
     command_exec: 'bg-surface-600 text-text-primary border-border',
     terminal_connect: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
     terminal_disconnect: 'bg-accent-red-bg text-accent-red border-accent-red-dim',
+  }
+
+  const fetchGlobalCmds = () => {
+    getGlobalCommands().then(setGlobalCmds).catch(() => setGlobalCmds([]))
   }
 
   useEffect(() => {
@@ -39,6 +49,7 @@ export default function Settings() {
     getLoginAttempts()
       .then(setLoginAttempts)
       .catch(() => setLoginAttempts([]))
+    fetchGlobalCmds()
   }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,6 +102,50 @@ export default function Settings() {
     navigate('/login')
   }
 
+  const handleGlobalFormReset = () => {
+    setGlobalForm({ name: '', command: '', tag: '', description: '', is_template: false, sort_order: 0 })
+    setEditingGlobal(null)
+    setShowGlobalForm(false)
+  }
+
+  const handleGlobalSave = async () => {
+    if (!globalForm.name || !globalForm.command) return
+    try {
+      if (editingGlobal) {
+        await updateGlobalCommand(editingGlobal.id, globalForm)
+      } else {
+        await createGlobalCommand(globalForm)
+      }
+      handleGlobalFormReset()
+      fetchGlobalCmds()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleGlobalEdit = (cmd: GlobalCommand) => {
+    setEditingGlobal(cmd)
+    setGlobalForm({
+      name: cmd.name,
+      command: cmd.command,
+      tag: cmd.tag,
+      description: cmd.description,
+      is_template: cmd.is_template,
+      sort_order: cmd.sort_order,
+    })
+    setShowGlobalForm(true)
+  }
+
+  const handleGlobalDelete = async (id: number) => {
+    if (!window.confirm('Delete this global command?')) return
+    try {
+      await deleteGlobalCommand(id)
+      fetchGlobalCmds()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen bg-surface-900">
       {/* Header */}
@@ -123,26 +178,19 @@ export default function Settings() {
 
       {/* Tabs */}
       <div className="flex gap-1 px-6 pt-4">
-        <button
-          onClick={() => setActiveTab('general')}
-          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-            activeTab === 'general'
-              ? 'bg-surface-800 text-text-primary border border-border border-b-0'
-              : 'text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          General
-        </button>
-        <button
-          onClick={() => setActiveTab('security')}
-          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-            activeTab === 'security'
-              ? 'bg-surface-800 text-text-primary border border-border border-b-0'
-              : 'text-text-muted hover:text-text-secondary'
-          }`}
-        >
-          Security & Audit
-        </button>
+        {(['general', 'commands', 'security'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+              activeTab === tab
+                ? 'bg-surface-800 text-text-primary border border-border border-b-0'
+                : 'text-text-muted hover:text-text-secondary'
+            }`}
+          >
+            {tab === 'general' ? 'General' : tab === 'commands' ? 'Commands' : 'Security & Audit'}
+          </button>
+        ))}
       </div>
 
       {/* Content */}
@@ -192,7 +240,6 @@ export default function Settings() {
                   Export & Import
                 </h2>
 
-                {/* Export */}
                 <div className="mb-6">
                   <p className="text-sm text-text-secondary mb-2">
                     Download all servers and settings as a JSON file.
@@ -205,7 +252,6 @@ export default function Settings() {
                   </button>
                 </div>
 
-                {/* Import */}
                 <div>
                   <p className="text-sm text-text-secondary mb-2">
                     Import servers and settings from a JSON file.
@@ -222,7 +268,6 @@ export default function Settings() {
                       <p className="text-sm text-text-primary">
                         Found {importFile.servers?.length ?? 0} server(s) in file
                       </p>
-
                       <div className="flex items-center gap-4">
                         <label className="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer">
                           <input
@@ -247,7 +292,6 @@ export default function Settings() {
                           Replace all
                         </label>
                       </div>
-
                       <button
                         onClick={handleImport}
                         disabled={importing}
@@ -268,9 +312,17 @@ export default function Settings() {
 
               {/* Audit Log section */}
               <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
-                  Audit Log
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+                    Audit Log
+                  </h2>
+                  <button
+                    onClick={() => navigate('/audit')}
+                    className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
+                  >
+                    Full Audit Trail
+                  </button>
+                </div>
                 {auditEntries.length === 0 ? (
                   <p className="text-sm text-text-muted">No audit entries yet.</p>
                 ) : (
@@ -299,6 +351,147 @@ export default function Settings() {
                             <span>Server #{entry.server_id}</span>
                           )}
                           <span>{entry.created_at}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'commands' && (
+            <>
+              {/* Global Commands section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+                    Global Commands
+                  </h2>
+                  <button
+                    onClick={() => { handleGlobalFormReset(); setShowGlobalForm(true) }}
+                    className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
+                  >
+                    + Add Command
+                  </button>
+                </div>
+                <p className="text-xs text-text-muted mb-4">
+                  Global commands are available on all servers. Use {'{{variable_name}}'} or {'{{variable_name:default}}'} for templates.
+                </p>
+
+                {showGlobalForm && (
+                  <div className="mb-4 p-4 bg-surface-900 border border-border rounded-lg space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-text-secondary mb-1">Name</label>
+                        <input
+                          type="text"
+                          value={globalForm.name}
+                          onChange={(e) => setGlobalForm(f => ({ ...f, name: e.target.value }))}
+                          className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                          placeholder="e.g. Check Disk Space"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-text-secondary mb-1">Tag</label>
+                        <input
+                          type="text"
+                          value={globalForm.tag}
+                          onChange={(e) => setGlobalForm(f => ({ ...f, tag: e.target.value }))}
+                          className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                          placeholder="e.g. monitoring"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Command</label>
+                      <input
+                        type="text"
+                        value={globalForm.command}
+                        onChange={(e) => setGlobalForm(f => ({ ...f, command: e.target.value }))}
+                        className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent-blue"
+                        placeholder="e.g. df -h or docker logs {{container_name}} --tail {{lines:100}}"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Description</label>
+                      <input
+                        type="text"
+                        value={globalForm.description}
+                        onChange={(e) => setGlobalForm(f => ({ ...f, description: e.target.value }))}
+                        className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                        placeholder="Optional description"
+                      />
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-sm text-text-secondary cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={globalForm.is_template}
+                          onChange={(e) => setGlobalForm(f => ({ ...f, is_template: e.target.checked }))}
+                          className="accent-accent-blue"
+                        />
+                        Template (has variables)
+                      </label>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={handleGlobalSave}
+                        className="px-4 py-1.5 text-xs font-medium text-white bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
+                      >
+                        {editingGlobal ? 'Update' : 'Add'}
+                      </button>
+                      <button
+                        onClick={handleGlobalFormReset}
+                        className="px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface-700 rounded-md hover:bg-surface-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {globalCmds.length === 0 ? (
+                  <p className="text-sm text-text-muted">No global commands yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {globalCmds.map((cmd) => (
+                      <div
+                        key={cmd.id}
+                        className="flex items-center justify-between px-3 py-2.5 bg-surface-700 rounded-lg"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text-primary">{cmd.name}</span>
+                            {cmd.tag && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-600 text-text-secondary">
+                                {cmd.tag}
+                              </span>
+                            )}
+                            {cmd.is_template && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-blue-dim text-accent-blue">
+                                template
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs font-mono text-text-muted truncate mt-0.5">{cmd.command}</p>
+                          {cmd.description && (
+                            <p className="text-xs text-text-muted mt-0.5">{cmd.description}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1.5 ml-3">
+                          <button
+                            onClick={() => handleGlobalEdit(cmd)}
+                            className="px-2 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleGlobalDelete(cmd.id)}
+                            className="px-2 py-1 text-xs text-accent-red hover:opacity-80 transition-opacity"
+                          >
+                            Delete
+                          </button>
                         </div>
                       </div>
                     ))}

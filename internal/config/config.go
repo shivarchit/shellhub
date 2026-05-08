@@ -10,11 +10,23 @@ import (
 var ErrNotFound = errors.New("server not found")
 
 type QuickCommand struct {
-	ID       int    `json:"id" db:"id"`
-	ServerID int    `json:"-" db:"server_id"`
-	Name     string `yaml:"name" json:"name" db:"name"`
-	Command  string `yaml:"command" json:"command" db:"command"`
-	Tag      string `yaml:"tag" json:"tag" db:"tag"`
+	ID         int    `json:"id" db:"id"`
+	ServerID   int    `json:"-" db:"server_id"`
+	Name       string `yaml:"name" json:"name" db:"name"`
+	Command    string `yaml:"command" json:"command" db:"command"`
+	Tag        string `yaml:"tag" json:"tag" db:"tag"`
+	IsTemplate bool   `yaml:"is_template" json:"is_template" db:"is_template"`
+}
+
+type GlobalCommand struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Command     string `json:"command"`
+	Tag         string `json:"tag"`
+	Description string `json:"description"`
+	IsTemplate  bool   `json:"is_template"`
+	SortOrder   int    `json:"sort_order"`
+	CreatedAt   string `json:"created_at"`
 }
 
 type Server struct {
@@ -138,11 +150,29 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS global_commands (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			name TEXT NOT NULL,
+			command TEXT NOT NULL,
+			tag TEXT NOT NULL DEFAULT '',
+			description TEXT NOT NULL DEFAULT '',
+			is_template INTEGER NOT NULL DEFAULT 0,
+			sort_order INTEGER NOT NULL DEFAULT 0,
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Add new columns for key-based auth (harmlessly errors if columns already exist)
 	s := &Store{db: db}
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN private_key TEXT NOT NULL DEFAULT ''`)
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
+	s.db.Exec(`ALTER TABLE quick_commands ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0`)
+	s.db.Exec(`ALTER TABLE exec_history ADD COLUMN server_name TEXT NOT NULL DEFAULT ''`)
 
 	return s, nil
 }
@@ -219,8 +249,8 @@ func (s *Store) AddServer(srv Server) (int, error) {
 
 	for _, cmd := range srv.QuickCommands {
 		if _, err := s.db.Exec(
-			`INSERT INTO quick_commands (server_id, name, command, tag) VALUES (?, ?, ?, ?)`,
-			id, cmd.Name, cmd.Command, cmd.Tag,
+			`INSERT INTO quick_commands (server_id, name, command, tag, is_template) VALUES (?, ?, ?, ?, ?)`,
+			id, cmd.Name, cmd.Command, cmd.Tag, cmd.IsTemplate,
 		); err != nil {
 			return 0, err
 		}
@@ -258,8 +288,8 @@ func (s *Store) UpdateServer(id int, srv Server) error {
 
 	for _, cmd := range srv.QuickCommands {
 		if _, err := tx.Exec(
-			`INSERT INTO quick_commands (server_id, name, command, tag) VALUES (?, ?, ?, ?)`,
-			id, cmd.Name, cmd.Command, cmd.Tag,
+			`INSERT INTO quick_commands (server_id, name, command, tag, is_template) VALUES (?, ?, ?, ?, ?)`,
+			id, cmd.Name, cmd.Command, cmd.Tag, cmd.IsTemplate,
 		); err != nil {
 			return err
 		}
@@ -284,7 +314,7 @@ func (s *Store) DeleteServer(id int) error {
 }
 
 func (s *Store) getQuickCommands(serverID int) ([]QuickCommand, error) {
-	rows, err := s.db.Query(`SELECT id, server_id, name, command, tag FROM quick_commands WHERE server_id = ? ORDER BY id`, serverID)
+	rows, err := s.db.Query(`SELECT id, server_id, name, command, tag, is_template FROM quick_commands WHERE server_id = ? ORDER BY id`, serverID)
 	if err != nil {
 		return nil, err
 	}
@@ -293,7 +323,7 @@ func (s *Store) getQuickCommands(serverID int) ([]QuickCommand, error) {
 	var cmds []QuickCommand
 	for rows.Next() {
 		var cmd QuickCommand
-		if err := rows.Scan(&cmd.ID, &cmd.ServerID, &cmd.Name, &cmd.Command, &cmd.Tag); err != nil {
+		if err := rows.Scan(&cmd.ID, &cmd.ServerID, &cmd.Name, &cmd.Command, &cmd.Tag, &cmd.IsTemplate); err != nil {
 			return nil, err
 		}
 		cmds = append(cmds, cmd)
@@ -409,6 +439,7 @@ func (s *Store) GetConnectionHistory(serverID, limit int) ([]ConnectionRecord, e
 type ExecRecord struct {
 	ID          int    `json:"id"`
 	ServerID    int    `json:"server_id"`
+	ServerName  string `json:"server_name"`
 	CommandName string `json:"command_name"`
 	CommandText string `json:"command_text"`
 	Output      string `json:"output"`
@@ -419,16 +450,16 @@ type ExecRecord struct {
 
 func (s *Store) LogExec(rec ExecRecord) error {
 	_, err := s.db.Exec(
-		`INSERT INTO exec_history (server_id, command_name, command_text, output, exit_code, duration_ms)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		rec.ServerID, rec.CommandName, rec.CommandText, rec.Output, rec.ExitCode, rec.DurationMs,
+		`INSERT INTO exec_history (server_id, server_name, command_name, command_text, output, exit_code, duration_ms)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		rec.ServerID, rec.ServerName, rec.CommandName, rec.CommandText, rec.Output, rec.ExitCode, rec.DurationMs,
 	)
 	return err
 }
 
 func (s *Store) GetExecHistory(serverID, limit int) ([]ExecRecord, error) {
 	rows, err := s.db.Query(
-		`SELECT id, server_id, command_name, command_text, output, exit_code, executed_at, duration_ms
+		`SELECT id, server_id, server_name, command_name, command_text, output, exit_code, executed_at, duration_ms
 		 FROM exec_history WHERE server_id = ? ORDER BY id DESC LIMIT ?`,
 		serverID, limit,
 	)
@@ -439,12 +470,148 @@ func (s *Store) GetExecHistory(serverID, limit int) ([]ExecRecord, error) {
 	var records []ExecRecord
 	for rows.Next() {
 		var r ExecRecord
-		if err := rows.Scan(&r.ID, &r.ServerID, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs); err != nil {
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.ServerName, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs); err != nil {
 			return nil, err
 		}
 		records = append(records, r)
 	}
 	return records, rows.Err()
+}
+
+// GetAllExecHistory returns paginated exec history across all servers with filtering
+type ExecHistoryFilter struct {
+	ServerID   *int
+	Search     string
+	ExitCode   *int
+	DateFrom   string
+	DateTo     string
+	Limit      int
+	Offset     int
+}
+
+type ExecHistoryPage struct {
+	Records []ExecRecord `json:"records"`
+	Total   int          `json:"total"`
+}
+
+func (s *Store) GetAllExecHistory(filter ExecHistoryFilter) (*ExecHistoryPage, error) {
+	where := "WHERE 1=1"
+	args := []any{}
+
+	if filter.ServerID != nil {
+		where += " AND server_id = ?"
+		args = append(args, *filter.ServerID)
+	}
+	if filter.Search != "" {
+		where += " AND (command_name LIKE ? OR command_text LIKE ?)"
+		like := "%" + filter.Search + "%"
+		args = append(args, like, like)
+	}
+	if filter.ExitCode != nil {
+		if *filter.ExitCode == 0 {
+			where += " AND exit_code = 0"
+		} else {
+			where += " AND exit_code != 0"
+		}
+	}
+	if filter.DateFrom != "" {
+		where += " AND executed_at >= ?"
+		args = append(args, filter.DateFrom)
+	}
+	if filter.DateTo != "" {
+		where += " AND executed_at <= ?"
+		args = append(args, filter.DateTo)
+	}
+
+	// Count total
+	var total int
+	countQuery := "SELECT COUNT(*) FROM exec_history " + where
+	if err := s.db.QueryRow(countQuery, args...).Scan(&total); err != nil {
+		return nil, err
+	}
+
+	// Fetch page
+	query := "SELECT id, server_id, server_name, command_name, command_text, output, exit_code, executed_at, duration_ms FROM exec_history " + where + " ORDER BY id DESC LIMIT ? OFFSET ?"
+	pageArgs := append(args, filter.Limit, filter.Offset)
+	rows, err := s.db.Query(query, pageArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []ExecRecord
+	for rows.Next() {
+		var r ExecRecord
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.ServerName, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs); err != nil {
+			return nil, err
+		}
+		records = append(records, r)
+	}
+	if records == nil {
+		records = []ExecRecord{}
+	}
+	return &ExecHistoryPage{Records: records, Total: total}, rows.Err()
+}
+
+// Global Commands CRUD
+func (s *Store) GetGlobalCommands() ([]GlobalCommand, error) {
+	rows, err := s.db.Query(`SELECT id, name, command, tag, description, is_template, sort_order, created_at FROM global_commands ORDER BY sort_order, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var cmds []GlobalCommand
+	for rows.Next() {
+		var cmd GlobalCommand
+		if err := rows.Scan(&cmd.ID, &cmd.Name, &cmd.Command, &cmd.Tag, &cmd.Description, &cmd.IsTemplate, &cmd.SortOrder, &cmd.CreatedAt); err != nil {
+			return nil, err
+		}
+		cmds = append(cmds, cmd)
+	}
+	if cmds == nil {
+		cmds = []GlobalCommand{}
+	}
+	return cmds, rows.Err()
+}
+
+func (s *Store) AddGlobalCommand(cmd GlobalCommand) (int, error) {
+	res, err := s.db.Exec(
+		`INSERT INTO global_commands (name, command, tag, description, is_template, sort_order) VALUES (?, ?, ?, ?, ?, ?)`,
+		cmd.Name, cmd.Command, cmd.Tag, cmd.Description, cmd.IsTemplate, cmd.SortOrder,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, _ := res.LastInsertId()
+	return int(id), nil
+}
+
+func (s *Store) UpdateGlobalCommand(id int, cmd GlobalCommand) error {
+	res, err := s.db.Exec(
+		`UPDATE global_commands SET name = ?, command = ?, tag = ?, description = ?, is_template = ?, sort_order = ? WHERE id = ?`,
+		cmd.Name, cmd.Command, cmd.Tag, cmd.Description, cmd.IsTemplate, cmd.SortOrder, id,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+func (s *Store) DeleteGlobalCommand(id int) error {
+	res, err := s.db.Exec(`DELETE FROM global_commands WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 type AuditEntry struct {

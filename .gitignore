@@ -29,3 +29,4 @@ shellhub.db
 # Env
 .env
 tmp/
+.claude/worktrees/
