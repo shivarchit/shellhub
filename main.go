@@ -64,6 +64,11 @@ func runServer(port int, dbPath string, dev bool) error {
 		return fmt.Errorf("failed to initialize auth: %w", err)
 	}
 
+	// Seed default admin user if no users exist (admin/admin123)
+	if err := authStore.EnsureDefaultAdmin(); err != nil {
+		log.Printf("Warning: could not seed default admin: %v", err)
+	}
+
 	sshClient := sshpkg.NewClient()
 	apiHandler := api.NewHandler(store, sshClient, sshClient, authStore)
 	authHandler := api.NewAuthHandler(authStore)

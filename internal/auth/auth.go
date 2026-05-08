@@ -128,6 +128,20 @@ func (s *AuthStore) HasUsers() (bool, error) {
 	return count > 0, err
 }
 
+// EnsureDefaultAdmin creates a default admin user if no users exist.
+// Default credentials: admin / admin123
+func (s *AuthStore) EnsureDefaultAdmin() error {
+	hasUsers, err := s.HasUsers()
+	if err != nil {
+		return err
+	}
+	if hasUsers {
+		return nil
+	}
+	_, err = s.CreateUser("admin", "admin123")
+	return err
+}
+
 // CreateUser creates a new user with bcrypt-hashed password.
 func (s *AuthStore) CreateUser(username, password string) (*User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

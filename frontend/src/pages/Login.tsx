@@ -9,7 +9,8 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  const isSetup = setupRequired
+  const [showLogin, setShowLogin] = useState(false)
+  const isSetup = setupRequired && !showLogin
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -141,6 +142,34 @@ export default function Login() {
           {isSetup && (
             <p className="text-xs text-text-muted text-center">
               Your password is also used to encrypt stored server credentials.
+            </p>
+          )}
+
+          {setupRequired && (
+            <div className="pt-2 border-t border-border mt-2">
+              {isSetup ? (
+                <button
+                  type="button"
+                  onClick={() => setShowLogin(true)}
+                  className="w-full text-center text-xs text-accent-blue hover:underline"
+                >
+                  Already have an account? Sign In
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowLogin(false)}
+                  className="w-full text-center text-xs text-accent-blue hover:underline"
+                >
+                  Create a new account instead
+                </button>
+              )}
+            </div>
+          )}
+
+          {!isSetup && (
+            <p className="text-xs text-text-muted text-center">
+              Default credentials: admin / admin123
             </p>
           )}
         </form>

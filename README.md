@@ -22,7 +22,7 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Session Tokens** — HMAC-SHA256 tokens in httpOnly cookies (24h expiry)
 - **Encrypted Credentials** — server passwords and SSH keys encrypted at rest with AES-256-GCM
 - **Rate Limiting** — accounts locked after 5 failed login attempts in 10 minutes (auto-unlock after 30 min)
-- **First-Run Setup** — registration page shown when no users exist, then protected by auth
+- **Default Admin** — ships with a root admin account (admin/admin123), with option to create additional accounts
 - **Login Audit** — all login attempts (success/failure) logged with IP and user agent
 
 ### Terminal Power
@@ -61,8 +61,10 @@ Just double-click `shellhub.exe` (or run `./shellhub` on Linux/macOS).
 On first launch:
 1. A folder picker dialog asks where to store your data
 2. Your browser opens automatically to the dashboard
-3. Create your admin account (first-run registration)
+3. Login with default credentials: **admin** / **admin123**
 4. A tray icon appears — right-click it to open the browser or stop the server
+
+> **Important:** Change the default password after first login. You can also create a new account from the login page.
 
 Add servers from the browser. Everything is stored in `shellhub.db` in the folder you chose.
 
