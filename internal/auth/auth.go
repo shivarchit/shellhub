@@ -133,22 +133,27 @@ func (s *AuthStore) HasUsers() (bool, error) {
 }
 
 // EnsureDefaultAdmin creates a default admin user if no users exist.
-// Default credentials: admin / admin123
+// Also ensures at least one superadmin exists (upgrades first user if needed).
 func (s *AuthStore) EnsureDefaultAdmin() error {
 	hasUsers, err := s.HasUsers()
 	if err != nil {
 		return err
 	}
-	if hasUsers {
-		return nil
-	}
-	user, err := s.CreateUser("admin", "admin123")
-	if err != nil {
+	if !hasUsers {
+		user, err := s.CreateUser("admin", "admin123")
+		if err != nil {
+			return err
+		}
+		_, err = s.db.Exec(`UPDATE users SET role = 'superadmin' WHERE id = ?`, user.ID)
 		return err
 	}
-	// Set the default admin as superadmin
-	_, err = s.db.Exec(`UPDATE users SET role = 'superadmin' WHERE id = ?`, user.ID)
-	return err
+	// Ensure at least one superadmin exists (handles upgrades from older DBs)
+	var count int
+	s.db.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'superadmin'`).Scan(&count)
+	if count == 0 {
+		s.db.Exec(`UPDATE users SET role = 'superadmin' WHERE id = (SELECT MIN(id) FROM users)`)
+	}
+	return nil
 }
 
 // CreateUser creates a new user with bcrypt-hashed password (role defaults to 'user').

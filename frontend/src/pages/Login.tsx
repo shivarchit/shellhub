@@ -167,11 +167,6 @@ export default function Login() {
             </div>
           )}
 
-          {!isSetup && (
-            <p className="text-xs text-text-muted text-center">
-              Default credentials: admin / admin123
-            </p>
-          )}
         </form>
       </div>
     </div>
