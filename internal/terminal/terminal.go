@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/sarchitt/shellhub/internal/auth"
 	"github.com/sarchitt/shellhub/internal/config"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 )
@@ -26,10 +27,15 @@ type resizeMessage struct {
 type Handler struct {
 	store     *config.Store
 	sshClient *sshpkg.Client
+	authStore *auth.AuthStore
 }
 
 func NewHandler(store *config.Store, sshClient *sshpkg.Client) *Handler {
 	return &Handler{store: store, sshClient: sshClient}
+}
+
+func NewHandlerWithAuth(store *config.Store, sshClient *sshpkg.Client, authStore *auth.AuthStore) *Handler {
+	return &Handler{store: store, sshClient: sshClient, authStore: authStore}
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -52,6 +58,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer wsConn.Close()
+
+	// Decrypt credentials for SSH connection
+	if h.authStore != nil && h.authStore.HasEncryptionKey() {
+		if dec, err := h.authStore.Decrypt(srv.Password); err == nil {
+			srv.Password = dec
+		}
+		if dec, err := h.authStore.Decrypt(srv.PrivateKey); err == nil {
+			srv.PrivateKey = dec
+		}
+	}
 
 	sshClient, err := h.sshClient.Connect(*srv)
 	if err != nil {

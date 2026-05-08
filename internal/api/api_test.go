@@ -35,7 +35,7 @@ func setupHandler(t *testing.T) (*Handler, *http.ServeMux) {
 		t.Fatalf("failed to create store: %v", err)
 	}
 	t.Cleanup(func() { store.Close() })
-	h := NewHandler(store, &mockPinger{online: true}, &mockExecutor{output: "hello\n", exitCode: 0})
+	h := NewHandler(store, &mockPinger{online: true}, &mockExecutor{output: "hello\n", exitCode: 0}, nil)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	return h, mux

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/sarchitt/shellhub/internal/api"
+	"github.com/sarchitt/shellhub/internal/auth"
 	"github.com/sarchitt/shellhub/internal/config"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 	"github.com/sarchitt/shellhub/internal/terminal"
@@ -26,9 +27,10 @@ var frontendFS embed.FS
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if origin := r.Header.Get("Origin"); origin != "" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -56,8 +58,15 @@ func runServer(port int, dbPath string, dev bool) error {
 		log.Printf("Imported %d servers from %s", n, yamlPath)
 	}
 
+	// Initialize auth store
+	authStore, err := auth.NewAuthStore(store.DB())
+	if err != nil {
+		return fmt.Errorf("failed to initialize auth: %w", err)
+	}
+
 	sshClient := sshpkg.NewClient()
-	apiHandler := api.NewHandler(store, sshClient, sshClient)
+	apiHandler := api.NewHandler(store, sshClient, sshClient, authStore)
+	authHandler := api.NewAuthHandler(authStore)
 
 	mux := http.NewServeMux()
 
@@ -66,9 +75,12 @@ func runServer(port int, dbPath string, dev bool) error {
 		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
+	// Auth routes (no auth required)
+	authHandler.RegisterRoutes(mux)
+
 	apiHandler.RegisterRoutes(mux)
 
-	termHandler := terminal.NewHandler(store, sshClient)
+	termHandler := terminal.NewHandlerWithAuth(store, sshClient, authStore)
 	mux.Handle("/api/terminal/{id}", termHandler)
 
 	// Serve embedded frontend (production mode)
@@ -98,7 +110,10 @@ func runServer(port int, dbPath string, dev bool) error {
 
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("ShellHub server listening on %s", addr)
-	return http.ListenAndServe(addr, cors(mux))
+
+	// Wrap the mux with auth middleware
+	handler := cors(authStore.SetupOrAuthMiddleware(mux))
+	return http.ListenAndServe(addr, handler)
 }
 
 func openBrowser(url string) {

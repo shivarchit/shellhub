@@ -1,12 +1,18 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt } from './types'
 
 const BASE = '/api'
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     ...options,
   })
+  if (res.status === 401) {
+    // Redirect to login if unauthorized
+    window.location.href = '/login'
+    throw new Error('Unauthorized')
+  }
   if (!res.ok) {
     const body = await res.json().catch(() => ({ error: res.statusText }))
     throw new Error(body.error || `HTTP ${res.status}`)
@@ -67,3 +73,6 @@ export const getExecHistory = (id: number) =>
 
 export const getAuditLog = (limit = 100, offset = 0) =>
   request<AuditEntry[]>(`/audit-log?limit=${limit}&offset=${offset}`)
+
+export const getLoginAttempts = (limit = 100, offset = 0) =>
+  request<LoginAttempt[]>(`/auth/login-attempts?limit=${limit}&offset=${offset}`)

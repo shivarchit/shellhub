@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData, getAuditLog } from '../lib/api'
-import type { AuditEntry } from '../lib/types'
+import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts } from '../lib/api'
+import type { AuditEntry, LoginAttempt } from '../lib/types'
+import { useAuth } from '../lib/auth'
 
 export default function Settings() {
   const navigate = useNavigate()
+  const { logout } = useAuth()
   const [pingInterval, setPingInterval] = useState('30')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -13,6 +15,8 @@ export default function Settings() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState('')
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
+  const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([])
+  const [activeTab, setActiveTab] = useState<'general' | 'security'>('general')
 
   const actionColors: Record<string, string> = {
     server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
@@ -32,6 +36,9 @@ export default function Settings() {
     getAuditLog()
       .then(setAuditEntries)
       .catch(() => setAuditEntries([]))
+    getLoginAttempts()
+      .then(setLoginAttempts)
+      .catch(() => setLoginAttempts([]))
   }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -79,186 +86,305 @@ export default function Settings() {
     }
   }
 
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login')
+  }
+
   return (
     <div className="flex flex-col h-screen bg-surface-900">
       {/* Header */}
-      <div className="flex items-center gap-3 px-6 py-4 border-b border-border bg-surface-800">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-800">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-700 transition-colors"
+            title="Back to Dashboard"
+          >
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M10 4L6 8L10 12"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <h1 className="text-lg font-semibold text-text-primary">Settings</h1>
+        </div>
         <button
-          onClick={() => navigate('/')}
-          className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-700 transition-colors"
-          title="Back to Dashboard"
+          onClick={handleLogout}
+          className="px-3 py-1.5 text-sm font-medium rounded-lg border border-border text-text-secondary hover:text-accent-red hover:border-accent-red-dim transition-colors"
         >
-          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
-            <path
-              d="M10 4L6 8L10 12"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
+          Logout
         </button>
-        <h1 className="text-lg font-semibold text-text-primary">Settings</h1>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 px-6 pt-4">
+        <button
+          onClick={() => setActiveTab('general')}
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            activeTab === 'general'
+              ? 'bg-surface-800 text-text-primary border border-border border-b-0'
+              : 'text-text-muted hover:text-text-secondary'
+          }`}
+        >
+          General
+        </button>
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
+            activeTab === 'security'
+              ? 'bg-surface-800 text-text-primary border border-border border-b-0'
+              : 'text-text-muted hover:text-text-secondary'
+          }`}
+        >
+          Security & Audit
+        </button>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6 pt-0">
         <div className="max-w-xl mx-auto">
-          {/* General section */}
-          <div className="bg-surface-800 border border-border rounded-xl p-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
-              General
-            </h2>
+          {activeTab === 'general' && (
+            <>
+              {/* General section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  General
+                </h2>
 
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-text-secondary mb-1.5">
-                Ping Interval (minutes)
-              </label>
-              <input
-                type="number"
-                min="1"
-                value={pingInterval}
-                onChange={(e) => setPingInterval(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent-blue"
-              />
-              <p className="text-xs text-text-muted mt-1.5">
-                How often to check server online/offline status
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              {saved && (
-                <span className="text-sm text-accent-green">Settings saved</span>
-              )}
-            </div>
-          </div>
-
-          {/* Export & Import section */}
-          <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
-              Export & Import
-            </h2>
-
-            {/* Export */}
-            <div className="mb-6">
-              <p className="text-sm text-text-secondary mb-2">
-                Download all servers and settings as a JSON file.
-              </p>
-              <button
-                onClick={exportData}
-                className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
-              >
-                Export Data
-              </button>
-            </div>
-
-            {/* Import */}
-            <div>
-              <p className="text-sm text-text-secondary mb-2">
-                Import servers and settings from a JSON file.
-              </p>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleFileChange}
-                className="block w-full text-sm text-text-secondary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-surface-700 file:text-text-primary hover:file:bg-surface-600 file:cursor-pointer file:transition-colors"
-              />
-
-              {importFile && (
-                <div className="mt-4 space-y-3">
-                  <p className="text-sm text-text-primary">
-                    Found {importFile.servers?.length ?? 0} server(s) in file
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-text-secondary mb-1.5">
+                    Ping Interval (minutes)
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={pingInterval}
+                    onChange={(e) => setPingInterval(e.target.value)}
+                    className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary font-mono focus:outline-none focus:border-accent-blue"
+                  />
+                  <p className="text-xs text-text-muted mt-1.5">
+                    How often to check server online/offline status
                   </p>
+                </div>
 
-                  <div className="flex items-center gap-4">
-                    <label className="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer">
-                      <input
-                        type="radio"
-                        name="importMode"
-                        value="merge"
-                        checked={importMode === 'merge'}
-                        onChange={() => setImportMode('merge')}
-                        className="accent-accent-blue"
-                      />
-                      Merge
-                    </label>
-                    <label className="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer">
-                      <input
-                        type="radio"
-                        name="importMode"
-                        value="replace"
-                        checked={importMode === 'replace'}
-                        onChange={() => setImportMode('replace')}
-                        className="accent-accent-blue"
-                      />
-                      Replace all
-                    </label>
-                  </div>
-
+                <div className="flex items-center gap-3">
                   <button
-                    onClick={handleImport}
-                    disabled={importing}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-green text-white hover:bg-accent-green/80 transition-colors disabled:opacity-50"
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
                   >
-                    {importing ? 'Importing...' : 'Import'}
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  {saved && (
+                    <span className="text-sm text-accent-green">Settings saved</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Export & Import section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Export & Import
+                </h2>
+
+                {/* Export */}
+                <div className="mb-6">
+                  <p className="text-sm text-text-secondary mb-2">
+                    Download all servers and settings as a JSON file.
+                  </p>
+                  <button
+                    onClick={exportData}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+                  >
+                    Export Data
                   </button>
                 </div>
-              )}
 
-              {importResult && (
-                <p className={`mt-3 text-sm ${importResult.startsWith('Import') && !importResult.includes('failed') ? 'text-accent-green' : 'text-red-400'}`}>
-                  {importResult}
-                </p>
-              )}
-            </div>
-          </div>
+                {/* Import */}
+                <div>
+                  <p className="text-sm text-text-secondary mb-2">
+                    Import servers and settings from a JSON file.
+                  </p>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleFileChange}
+                    className="block w-full text-sm text-text-secondary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-surface-700 file:text-text-primary hover:file:bg-surface-600 file:cursor-pointer file:transition-colors"
+                  />
 
-          {/* Audit Log section */}
-          <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
-              Audit Log
-            </h2>
-            {auditEntries.length === 0 ? (
-              <p className="text-sm text-text-muted">No audit entries yet.</p>
-            ) : (
-              <div className="max-h-96 overflow-y-auto space-y-1.5">
-                {auditEntries.map((entry) => (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg text-xs"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-semibold uppercase ${
-                          actionColors[entry.action] || 'bg-surface-600 text-text-muted border-border'
-                        }`}
+                  {importFile && (
+                    <div className="mt-4 space-y-3">
+                      <p className="text-sm text-text-primary">
+                        Found {importFile.servers?.length ?? 0} server(s) in file
+                      </p>
+
+                      <div className="flex items-center gap-4">
+                        <label className="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer">
+                          <input
+                            type="radio"
+                            name="importMode"
+                            value="merge"
+                            checked={importMode === 'merge'}
+                            onChange={() => setImportMode('merge')}
+                            className="accent-accent-blue"
+                          />
+                          Merge
+                        </label>
+                        <label className="flex items-center gap-1.5 text-sm text-text-secondary cursor-pointer">
+                          <input
+                            type="radio"
+                            name="importMode"
+                            value="replace"
+                            checked={importMode === 'replace'}
+                            onChange={() => setImportMode('replace')}
+                            className="accent-accent-blue"
+                          />
+                          Replace all
+                        </label>
+                      </div>
+
+                      <button
+                        onClick={handleImport}
+                        disabled={importing}
+                        className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-green text-white hover:bg-accent-green/80 transition-colors disabled:opacity-50"
                       >
-                        {entry.action.replace(/_/g, ' ')}
-                      </span>
-                      {entry.details && (
-                        <span className="text-text-primary truncate max-w-[200px]">
-                          {entry.details}
-                        </span>
-                      )}
+                        {importing ? 'Importing...' : 'Import'}
+                      </button>
                     </div>
-                    <div className="flex items-center gap-3 text-text-muted">
-                      {entry.server_id !== null && (
-                        <span>Server #{entry.server_id}</span>
-                      )}
-                      <span>{entry.created_at}</span>
-                    </div>
-                  </div>
-                ))}
+                  )}
+
+                  {importResult && (
+                    <p className={`mt-3 text-sm ${importResult.startsWith('Import') && !importResult.includes('failed') ? 'text-accent-green' : 'text-red-400'}`}>
+                      {importResult}
+                    </p>
+                  )}
+                </div>
               </div>
-            )}
-          </div>
+
+              {/* Audit Log section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Audit Log
+                </h2>
+                {auditEntries.length === 0 ? (
+                  <p className="text-sm text-text-muted">No audit entries yet.</p>
+                ) : (
+                  <div className="max-h-96 overflow-y-auto space-y-1.5">
+                    {auditEntries.map((entry) => (
+                      <div
+                        key={entry.id}
+                        className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-semibold uppercase ${
+                              actionColors[entry.action] || 'bg-surface-600 text-text-muted border-border'
+                            }`}
+                          >
+                            {entry.action.replace(/_/g, ' ')}
+                          </span>
+                          {entry.details && (
+                            <span className="text-text-primary truncate max-w-[200px]">
+                              {entry.details}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 text-text-muted">
+                          {entry.server_id !== null && (
+                            <span>Server #{entry.server_id}</span>
+                          )}
+                          <span>{entry.created_at}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+
+          {activeTab === 'security' && (
+            <>
+              {/* Login Audit section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Login Attempts
+                </h2>
+                <p className="text-xs text-text-muted mb-4">
+                  Accounts are locked after 5 failed attempts in 10 minutes (auto-unlock after 30 min).
+                </p>
+                {loginAttempts.length === 0 ? (
+                  <p className="text-sm text-text-muted">No login attempts recorded.</p>
+                ) : (
+                  <div className="max-h-[500px] overflow-y-auto space-y-1.5">
+                    {loginAttempts.map((attempt) => (
+                      <div
+                        key={attempt.id}
+                        className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg text-xs"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-semibold uppercase ${
+                              attempt.success
+                                ? 'bg-accent-green-bg text-accent-green border-accent-green-dim'
+                                : 'bg-accent-red-bg text-accent-red border-accent-red-dim'
+                            }`}
+                          >
+                            {attempt.success ? 'success' : 'failed'}
+                          </span>
+                          <span className="text-text-primary font-medium">
+                            {attempt.username}
+                          </span>
+                          <span className="text-text-muted">
+                            from {attempt.ip || 'unknown'}
+                          </span>
+                        </div>
+                        <span className="text-text-muted">{attempt.created_at}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Security Info */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Security Info
+                </h2>
+                <div className="space-y-3 text-sm text-text-secondary">
+                  <div className="flex items-start gap-2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-accent-green mt-0.5 shrink-0">
+                      <path d="M13.3 4.7L6.5 11.5L2.7 7.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>Passwords hashed with bcrypt</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-accent-green mt-0.5 shrink-0">
+                      <path d="M13.3 4.7L6.5 11.5L2.7 7.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>Server credentials encrypted at rest (AES-256-GCM)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-accent-green mt-0.5 shrink-0">
+                      <path d="M13.3 4.7L6.5 11.5L2.7 7.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>Session tokens in httpOnly cookies (24h expiry)</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-accent-green mt-0.5 shrink-0">
+                      <path d="M13.3 4.7L6.5 11.5L2.7 7.7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span>Rate limiting: 5 failed attempts locks account for 30 min</span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>

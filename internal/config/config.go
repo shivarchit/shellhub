@@ -151,6 +151,11 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
+// DB exposes the underlying sql.DB for use by other packages (e.g., auth).
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
 func (s *Store) GetServers() ([]Server, error) {
 	rows, err := s.db.Query(`SELECT id, name, host, port, username, password, "group", auth_type, private_key, sort_order FROM servers ORDER BY sort_order, id`)
 	if err != nil {

@@ -55,3 +55,12 @@ export interface AuditEntry {
   details: string
   created_at: string
 }
+
+export interface LoginAttempt {
+  id: number
+  username: string
+  success: boolean
+  ip: string
+  user_agent: string
+  created_at: string
+}

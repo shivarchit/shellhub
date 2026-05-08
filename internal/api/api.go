@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/sarchitt/shellhub/internal/auth"
 	"github.com/sarchitt/shellhub/internal/config"
 )
 
@@ -19,13 +20,14 @@ type Executor interface {
 }
 
 type Handler struct {
-	store    *config.Store
-	pinger   Pinger
-	executor Executor
+	store     *config.Store
+	pinger    Pinger
+	executor  Executor
+	authStore *auth.AuthStore
 }
 
-func NewHandler(store *config.Store, pinger Pinger, executor Executor) *Handler {
-	return &Handler{store: store, pinger: pinger, executor: executor}
+func NewHandler(store *config.Store, pinger Pinger, executor Executor, authStore *auth.AuthStore) *Handler {
+	return &Handler{store: store, pinger: pinger, executor: executor, authStore: authStore}
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -61,6 +63,21 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
+
+	// Encrypt credentials before storing
+	if h.authStore != nil && h.authStore.HasEncryptionKey() {
+		if srv.Password != "" {
+			if enc, err := h.authStore.Encrypt(srv.Password); err == nil {
+				srv.Password = enc
+			}
+		}
+		if srv.PrivateKey != "" {
+			if enc, err := h.authStore.Encrypt(srv.PrivateKey); err == nil {
+				srv.PrivateKey = enc
+			}
+		}
+	}
+
 	id, err := h.store.AddServer(srv)
 	if err != nil {
 		writeError(w, 500, err.Error())
@@ -82,6 +99,21 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
+
+	// Encrypt credentials before storing
+	if h.authStore != nil && h.authStore.HasEncryptionKey() {
+		if srv.Password != "" {
+			if enc, err := h.authStore.Encrypt(srv.Password); err == nil {
+				srv.Password = enc
+			}
+		}
+		if srv.PrivateKey != "" {
+			if enc, err := h.authStore.Encrypt(srv.PrivateKey); err == nil {
+				srv.PrivateKey = enc
+			}
+		}
+	}
+
 	if err := h.store.UpdateServer(id, srv); err != nil {
 		if errors.Is(err, config.ErrNotFound) {
 			writeError(w, 404, "server not found")
@@ -176,6 +208,10 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+
+	// Decrypt credentials for SSH connection
+	h.decryptServerCredentials(srv)
+
 	var body struct {
 		Command string `json:"command"`
 	}
@@ -198,6 +234,19 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 	})
 	h.store.LogAudit("command_exec", &id, body.Command)
 	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode})
+}
+
+// decryptServerCredentials decrypts password and private_key in place.
+func (h *Handler) decryptServerCredentials(srv *config.Server) {
+	if h.authStore == nil || !h.authStore.HasEncryptionKey() {
+		return
+	}
+	if dec, err := h.authStore.Decrypt(srv.Password); err == nil {
+		srv.Password = dec
+	}
+	if dec, err := h.authStore.Decrypt(srv.PrivateKey); err == nil {
+		srv.PrivateKey = dec
+	}
 }
 
 func (h *Handler) getSettings(w http.ResponseWriter, r *http.Request) {
