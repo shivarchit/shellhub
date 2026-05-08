@@ -58,6 +58,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/recordings/{id}", h.deleteRecording)
 	mux.HandleFunc("GET /api/servers/{id}/stats", h.getServerStats)
 	mux.HandleFunc("GET /api/metrics", h.getMetrics)
+	mux.HandleFunc("GET /api/db/tables", h.listTables)
+	mux.HandleFunc("GET /api/db/query", h.queryTable)
 }
 
 func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {

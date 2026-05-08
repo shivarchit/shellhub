@@ -5,7 +5,6 @@ import { getServerStats } from '../lib/api'
 interface ServerStatsWidgetProps {
   serverId: number
   online: boolean
-  refreshInterval?: number // seconds, default 60
 }
 
 function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
@@ -60,7 +59,7 @@ function formatMem(mb: number): string {
   return `${mb} MB`
 }
 
-export default function ServerStatsWidget({ serverId, online, refreshInterval = 60 }: ServerStatsWidgetProps) {
+export default function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
   const [stats, setStats] = useState<ServerStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -87,9 +86,7 @@ export default function ServerStatsWidget({ serverId, online, refreshInterval = 
   useEffect(() => {
     setLoading(true)
     fetchStats()
-    const id = setInterval(fetchStats, refreshInterval * 1000)
-    return () => clearInterval(id)
-  }, [fetchStats, refreshInterval])
+  }, [fetchStats])
 
   if (!online) {
     return (

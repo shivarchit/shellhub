@@ -122,6 +122,13 @@ export const getRecording = (id: number) =>
 export const deleteRecording = (id: number) =>
   request<void>(`/recordings/${id}`, { method: 'DELETE' })
 
+// DB Panel
+export const getDbTables = () =>
+  request<string[]>('/db/tables')
+
+export const queryDbTable = (table: string, limit = 100, offset = 0) =>
+  request<{ columns: string[]; rows: Record<string, any>[]; total: number }>(`/db/query?table=${encodeURIComponent(table)}&limit=${limit}&offset=${offset}`)
+
 // Server Stats & Metrics
 export const getServerStats = (id: number) =>
   request<ServerStats>(`/servers/${id}/stats`)

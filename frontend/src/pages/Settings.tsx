@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand } from '../lib/api'
+import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable } from '../lib/api'
 import type { AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput } from '../lib/types'
 import { useAuth } from '../lib/auth'
 
@@ -16,13 +16,20 @@ export default function Settings() {
   const [importResult, setImportResult] = useState('')
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([])
-  const [activeTab, setActiveTab] = useState<'general' | 'commands' | 'security'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'commands' | 'security' | 'database'>('general')
   const [globalCmds, setGlobalCmds] = useState<GlobalCommand[]>([])
   const [editingGlobal, setEditingGlobal] = useState<GlobalCommand | null>(null)
   const [showGlobalForm, setShowGlobalForm] = useState(false)
   const [globalForm, setGlobalForm] = useState<GlobalCommandInput>({
     name: '', command: '', tag: '', description: '', is_template: false, sort_order: 0,
   })
+  const [dbTables, setDbTables] = useState<string[]>([])
+  const [dbSelectedTable, setDbSelectedTable] = useState('')
+  const [dbColumns, setDbColumns] = useState<string[]>([])
+  const [dbRows, setDbRows] = useState<Record<string, any>[]>([])
+  const [dbTotal, setDbTotal] = useState(0)
+  const [dbOffset, setDbOffset] = useState(0)
+  const [dbLoading, setDbLoading] = useState(false)
 
   const actionColors: Record<string, string> = {
     server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
@@ -178,17 +185,22 @@ export default function Settings() {
 
       {/* Tabs */}
       <div className="flex gap-1 px-6 pt-4">
-        {(['general', 'commands', 'security'] as const).map((tab) => (
+        {(['general', 'commands', 'security', 'database'] as const).map((tab) => (
           <button
             key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => {
+              setActiveTab(tab)
+              if (tab === 'database' && dbTables.length === 0) {
+                getDbTables().then(setDbTables).catch(() => setDbTables([]))
+              }
+            }}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
               activeTab === tab
                 ? 'bg-surface-800 text-text-primary border border-border border-b-0'
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
-            {tab === 'general' ? 'General' : tab === 'commands' ? 'Commands' : 'Security & Audit'}
+            {tab === 'general' ? 'General' : tab === 'commands' ? 'Commands' : tab === 'security' ? 'Security & Audit' : 'Database'}
           </button>
         ))}
       </div>
@@ -575,6 +587,116 @@ export default function Settings() {
                     <span>Rate limiting: 5 failed attempts locks account for 30 min</span>
                   </div>
                 </div>
+              </div>
+            </>
+          )}
+
+          {activeTab === 'database' && (
+            <>
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Database Browser
+                </h2>
+
+                <div className="mb-4">
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">Table</label>
+                  <select
+                    value={dbSelectedTable}
+                    onChange={(e) => {
+                      const table = e.target.value
+                      setDbSelectedTable(table)
+                      setDbOffset(0)
+                      if (table) {
+                        setDbLoading(true)
+                        queryDbTable(table, 100, 0)
+                          .then((res) => {
+                            setDbColumns(res.columns)
+                            setDbRows(res.rows)
+                            setDbTotal(res.total)
+                          })
+                          .catch(() => { setDbColumns([]); setDbRows([]) })
+                          .finally(() => setDbLoading(false))
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                  >
+                    <option value="">Select a table...</option>
+                    {dbTables.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {dbSelectedTable && (
+                  <p className="text-xs text-text-muted mb-3">
+                    {dbTotal} row{dbTotal !== 1 ? 's' : ''} total
+                    {dbTotal > 100 && ` · showing ${dbOffset + 1}-${Math.min(dbOffset + 100, dbTotal)}`}
+                  </p>
+                )}
+
+                {dbLoading && (
+                  <div className="text-sm text-text-muted animate-pulse">Loading...</div>
+                )}
+
+                {!dbLoading && dbColumns.length > 0 && (
+                  <div className="overflow-x-auto max-h-[500px] overflow-y-auto border border-border rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="sticky top-0 bg-surface-700">
+                        <tr>
+                          {dbColumns.map((col) => (
+                            <th key={col} className="px-3 py-2 text-left font-semibold text-text-secondary border-b border-border whitespace-nowrap">
+                              {col}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dbRows.map((row, i) => (
+                          <tr key={i} className="border-b border-border/50 hover:bg-surface-700/50">
+                            {dbColumns.map((col) => (
+                              <td key={col} className="px-3 py-1.5 text-text-primary whitespace-nowrap max-w-[300px] truncate font-mono">
+                                {row[col] === null ? <span className="text-text-muted italic">NULL</span> : String(row[col])}
+                              </td>
+                            ))}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {!dbLoading && dbSelectedTable && dbTotal > 100 && (
+                  <div className="flex items-center gap-3 mt-3">
+                    <button
+                      onClick={() => {
+                        const newOffset = Math.max(0, dbOffset - 100)
+                        setDbOffset(newOffset)
+                        setDbLoading(true)
+                        queryDbTable(dbSelectedTable, 100, newOffset)
+                          .then((res) => { setDbColumns(res.columns); setDbRows(res.rows); setDbTotal(res.total) })
+                          .finally(() => setDbLoading(false))
+                      }}
+                      disabled={dbOffset === 0}
+                      className="px-3 py-1 text-xs font-medium rounded bg-surface-700 text-text-secondary hover:bg-surface-600 disabled:opacity-30 transition-colors"
+                    >
+                      Previous
+                    </button>
+                    <button
+                      onClick={() => {
+                        const newOffset = dbOffset + 100
+                        setDbOffset(newOffset)
+                        setDbLoading(true)
+                        queryDbTable(dbSelectedTable, 100, newOffset)
+                          .then((res) => { setDbColumns(res.columns); setDbRows(res.rows); setDbTotal(res.total) })
+                          .finally(() => setDbLoading(false))
+                      }}
+                      disabled={dbOffset + 100 >= dbTotal}
+                      className="px-3 py-1 text-xs font-medium rounded bg-surface-700 text-text-secondary hover:bg-surface-600 disabled:opacity-30 transition-colors"
+                    >
+                      Next
+                    </button>
+                  </div>
+                )}
               </div>
             </>
           )}
