@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Terminal from './pages/Terminal'
 import Settings from './pages/Settings'
+import Metrics from './pages/Metrics'
 import ToastProvider from './components/ToastProvider'
 
 export default function App() {
@@ -12,6 +13,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/terminal/:id" element={<Terminal />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/metrics" element={<Metrics />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

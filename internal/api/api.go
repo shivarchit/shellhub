@@ -36,10 +36,13 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/servers/{id}", h.deleteServer)
 	mux.HandleFunc("POST /api/servers/{id}/ping", h.pingServer)
 	mux.HandleFunc("POST /api/servers/{id}/exec", h.execCommand)
+	mux.HandleFunc("GET /api/servers/{id}/stats", h.getServerStats)
+	mux.HandleFunc("POST /api/servers/{id}/ping-record", h.recordPing)
 	mux.HandleFunc("POST /api/ping", h.pingHost)
 	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
 	mux.HandleFunc("GET /api/servers/{id}/exec-history", h.getExecHistory)
 	mux.HandleFunc("GET /api/audit-log", h.getAuditLog)
+	mux.HandleFunc("GET /api/metrics", h.getMetrics)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
 	mux.HandleFunc("PUT /api/settings", h.updateSettings)
 	mux.HandleFunc("GET /api/export", h.exportData)
@@ -157,7 +160,11 @@ func (h *Handler) pingServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	start := time.Now()
 	online, _ := h.pinger.Ping(srv.Host, srv.Port, 5*time.Second)
+	latencyMs := int(time.Since(start).Milliseconds())
+	// Record ping to history for metrics
+	h.store.LogPing(id, online, latencyMs)
 	writeJSON(w, 200, map[string]bool{"online": online})
 }
 

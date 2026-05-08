@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, ServerStats, MetricsResponse } from './types'
 
 const BASE = '/api'
 
@@ -67,3 +67,9 @@ export const getExecHistory = (id: number) =>
 
 export const getAuditLog = (limit = 100, offset = 0) =>
   request<AuditEntry[]>(`/audit-log?limit=${limit}&offset=${offset}`)
+
+export const getServerStats = (id: number) =>
+  request<ServerStats>(`/servers/${id}/stats`)
+
+export const getMetrics = (range: string = '7d') =>
+  request<MetricsResponse>(`/metrics?range=${range}`)

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(xargs wc -l)",
+      "Skill(update-config)",
+      "Write",
+      "Edit",
+      "Bash(npm *)",
+      "Bash(go *)",
+      "Bash(cd *)"
+    ]
+  }
+}

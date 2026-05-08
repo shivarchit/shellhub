@@ -4,6 +4,7 @@ import { getConnectionHistory, getExecHistory } from '../lib/api'
 import { cn } from '../lib/utils'
 import StatusDot from './StatusDot'
 import CommandCard from './CommandCard'
+import ServerStatsWidget from './ServerStatsWidget'
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr + 'Z').getTime()
@@ -141,6 +142,9 @@ export default function ServerDetail({
           </p>
         </div>
       </div>
+
+      {/* System Stats Widget */}
+      <ServerStatsWidget serverId={server.id} online={online} />
 
       {/* Quick Commands */}
       <div>

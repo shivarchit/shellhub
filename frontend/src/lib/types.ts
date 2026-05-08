@@ -55,3 +55,61 @@ export interface AuditEntry {
   details: string
   created_at: string
 }
+
+export interface ServerStats {
+  cpu: number
+  mem_used_mb: number
+  mem_total_mb: number
+  disk_used_gb: number
+  disk_total_gb: number
+  uptime: string
+  load_1: number
+  load_5: number
+  load_15: number
+  online: boolean
+  error?: string
+}
+
+export interface DailyCount {
+  date: string
+  count: number
+}
+
+export interface DailyExecCount {
+  date: string
+  success: number
+  failure: number
+}
+
+export interface ServerActivity {
+  server_id: number
+  server_name: string
+  count: number
+}
+
+export interface ServerUptimeInfo {
+  server_id: number
+  server_name: string
+  uptime: number
+}
+
+export interface LatencyPoint {
+  date: string
+  avg_ms: number
+}
+
+export interface MetricsSummary {
+  total_servers: number
+  online_servers: number
+  total_execs_today: number
+  avg_uptime: number
+}
+
+export interface MetricsResponse {
+  summary: MetricsSummary
+  uptimes: ServerUptimeInfo[]
+  connections: DailyCount[]
+  executions: DailyExecCount[]
+  top_servers: ServerActivity[]
+  latencies: Record<string, LatencyPoint[]>
+}

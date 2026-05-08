@@ -279,7 +279,16 @@ export default function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="px-3 py-3 border-t border-border">
+      <div className="px-3 py-3 border-t border-border space-y-2">
+        <button
+          onClick={() => navigate('/metrics')}
+          className="w-full py-2 text-sm text-text-secondary border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors flex items-center justify-center gap-2"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <path d="M2 14V8h3v6H2zM6.5 14V4h3v10h-3zM11 14V1h3v13h-3z" stroke="currentColor" strokeWidth="1" fill="none" />
+          </svg>
+          Metrics
+        </button>
         <button
           onClick={onAdd}
           className="w-full py-2 text-sm text-text-secondary border border-dashed border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"

@@ -138,6 +138,20 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS ping_history (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			server_id INTEGER NOT NULL,
+			pinged_at TEXT NOT NULL DEFAULT (datetime('now')),
+			online INTEGER NOT NULL DEFAULT 0,
+			latency_ms INTEGER NOT NULL DEFAULT 0,
+			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Add new columns for key-based auth (harmlessly errors if columns already exist)
 	s := &Store{db: db}
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
@@ -477,4 +491,250 @@ func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
 		entries = append(entries, e)
 	}
 	return entries, rows.Err()
+}
+
+// --- Ping History ---
+
+type PingRecord struct {
+	ID        int    `json:"id"`
+	ServerID  int    `json:"server_id"`
+	PingedAt  string `json:"pinged_at"`
+	Online    bool   `json:"online"`
+	LatencyMs int    `json:"latency_ms"`
+}
+
+func (s *Store) LogPing(serverID int, online bool, latencyMs int) error {
+	onlineInt := 0
+	if online {
+		onlineInt = 1
+	}
+	_, err := s.db.Exec(
+		`INSERT INTO ping_history (server_id, online, latency_ms) VALUES (?, ?, ?)`,
+		serverID, onlineInt, latencyMs,
+	)
+	return err
+}
+
+// GetUptimePercent returns the percentage of successful pings for a server within a time range.
+// hoursBack: 24, 168 (7d), 720 (30d)
+func (s *Store) GetUptimePercent(serverID int, hoursBack int) (float64, error) {
+	var total, online int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*), COALESCE(SUM(online), 0)
+		 FROM ping_history
+		 WHERE server_id = ? AND pinged_at >= datetime('now', ? || ' hours')`,
+		serverID, -hoursBack,
+	).Scan(&total, &online)
+	if err != nil {
+		return 0, err
+	}
+	if total == 0 {
+		return 0, nil
+	}
+	return float64(online) / float64(total) * 100, nil
+}
+
+// MetricsDailyCounts returns daily counts for connections and executions.
+type DailyCount struct {
+	Date  string `json:"date"`
+	Count int    `json:"count"`
+}
+
+type DailyExecCount struct {
+	Date    string `json:"date"`
+	Success int    `json:"success"`
+	Failure int    `json:"failure"`
+}
+
+func (s *Store) GetConnectionCountsByDay(hoursBack int) ([]DailyCount, error) {
+	rows, err := s.db.Query(
+		`SELECT date(connected_at) as d, COUNT(*) as c
+		 FROM connection_history
+		 WHERE connected_at >= datetime('now', ? || ' hours')
+		 GROUP BY d ORDER BY d`,
+		-hoursBack,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []DailyCount
+	for rows.Next() {
+		var r DailyCount
+		if err := rows.Scan(&r.Date, &r.Count); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	if results == nil {
+		results = []DailyCount{}
+	}
+	return results, rows.Err()
+}
+
+func (s *Store) GetExecCountsByDay(hoursBack int) ([]DailyExecCount, error) {
+	rows, err := s.db.Query(
+		`SELECT date(executed_at) as d,
+		        SUM(CASE WHEN exit_code = 0 THEN 1 ELSE 0 END) as success,
+		        SUM(CASE WHEN exit_code != 0 THEN 1 ELSE 0 END) as failure
+		 FROM exec_history
+		 WHERE executed_at >= datetime('now', ? || ' hours')
+		 GROUP BY d ORDER BY d`,
+		-hoursBack,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []DailyExecCount
+	for rows.Next() {
+		var r DailyExecCount
+		if err := rows.Scan(&r.Date, &r.Success, &r.Failure); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	if results == nil {
+		results = []DailyExecCount{}
+	}
+	return results, rows.Err()
+}
+
+type ServerActivity struct {
+	ServerID   int    `json:"server_id"`
+	ServerName string `json:"server_name"`
+	Count      int    `json:"count"`
+}
+
+func (s *Store) GetTopServersByActivity(hoursBack, limit int) ([]ServerActivity, error) {
+	rows, err := s.db.Query(
+		`SELECT e.server_id, s.name, COUNT(*) as c
+		 FROM exec_history e
+		 JOIN servers s ON s.id = e.server_id
+		 WHERE e.executed_at >= datetime('now', ? || ' hours')
+		 GROUP BY e.server_id ORDER BY c DESC LIMIT ?`,
+		-hoursBack, limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []ServerActivity
+	for rows.Next() {
+		var r ServerActivity
+		if err := rows.Scan(&r.ServerID, &r.ServerName, &r.Count); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	if results == nil {
+		results = []ServerActivity{}
+	}
+	return results, rows.Err()
+}
+
+type ServerUptimeInfo struct {
+	ServerID   int     `json:"server_id"`
+	ServerName string  `json:"server_name"`
+	Uptime     float64 `json:"uptime"`
+}
+
+func (s *Store) GetAllServersUptime(hoursBack int) ([]ServerUptimeInfo, error) {
+	rows, err := s.db.Query(
+		`SELECT p.server_id, s.name,
+		        CASE WHEN COUNT(*) = 0 THEN 0 ELSE (CAST(SUM(p.online) AS REAL) / COUNT(*)) * 100 END as uptime
+		 FROM ping_history p
+		 JOIN servers s ON s.id = p.server_id
+		 WHERE p.pinged_at >= datetime('now', ? || ' hours')
+		 GROUP BY p.server_id ORDER BY uptime DESC`,
+		-hoursBack,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []ServerUptimeInfo
+	for rows.Next() {
+		var r ServerUptimeInfo
+		if err := rows.Scan(&r.ServerID, &r.ServerName, &r.Uptime); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	if results == nil {
+		results = []ServerUptimeInfo{}
+	}
+	return results, rows.Err()
+}
+
+type LatencyPoint struct {
+	Date      string  `json:"date"`
+	AvgMs     float64 `json:"avg_ms"`
+}
+
+func (s *Store) GetLatencyTrend(serverID, hoursBack int) ([]LatencyPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT date(pinged_at) as d, AVG(latency_ms) as avg_ms
+		 FROM ping_history
+		 WHERE server_id = ? AND pinged_at >= datetime('now', ? || ' hours') AND online = 1
+		 GROUP BY d ORDER BY d`,
+		serverID, -hoursBack,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var results []LatencyPoint
+	for rows.Next() {
+		var r LatencyPoint
+		if err := rows.Scan(&r.Date, &r.AvgMs); err != nil {
+			return nil, err
+		}
+		results = append(results, r)
+	}
+	if results == nil {
+		results = []LatencyPoint{}
+	}
+	return results, rows.Err()
+}
+
+func (s *Store) GetAllLatencyTrends(hoursBack int) (map[int][]LatencyPoint, error) {
+	rows, err := s.db.Query(
+		`SELECT server_id, date(pinged_at) as d, AVG(latency_ms) as avg_ms
+		 FROM ping_history
+		 WHERE pinged_at >= datetime('now', ? || ' hours') AND online = 1
+		 GROUP BY server_id, d ORDER BY server_id, d`,
+		-hoursBack,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	results := make(map[int][]LatencyPoint)
+	for rows.Next() {
+		var serverID int
+		var r LatencyPoint
+		if err := rows.Scan(&serverID, &r.Date, &r.AvgMs); err != nil {
+			return nil, err
+		}
+		results[serverID] = append(results[serverID], r)
+	}
+	return results, rows.Err()
+}
+
+func (s *Store) GetTotalExecsToday() (int, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM exec_history WHERE executed_at >= date('now')`,
+	).Scan(&count)
+	return count, err
+}
+
+func (s *Store) GetOnlineServerCount() (int, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(DISTINCT server_id) FROM ping_history
+		 WHERE pinged_at >= datetime('now', '-5 minutes') AND online = 1`,
+	).Scan(&count)
+	return count, err
 }
