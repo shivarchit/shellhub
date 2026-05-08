@@ -11,7 +11,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sarchitt/shellhub/internal/api"
 	"github.com/sarchitt/shellhub/internal/auth"
@@ -71,7 +73,7 @@ func runServer(port int, dbPath string, dev bool) error {
 
 	sshClient := sshpkg.NewClient()
 	apiHandler := api.NewHandler(store, sshClient, sshClient, authStore)
-	authHandler := api.NewAuthHandler(authStore)
+	authHandler := api.NewAuthHandler(authStore, store)
 
 	mux := http.NewServeMux()
 
@@ -115,6 +117,27 @@ func runServer(port int, dbPath string, dev bool) error {
 
 	addr := fmt.Sprintf(":%d", port)
 	log.Printf("ShellHub server listening on %s", addr)
+
+	// Background ping job for uptime metrics
+	go func() {
+		for {
+			settings, _ := store.GetAllSettings()
+			intervalMin := 30
+			if v, ok := settings["ping_interval"]; ok {
+				if n, err := strconv.Atoi(v); err == nil && n > 0 {
+					intervalMin = n
+				}
+			}
+			time.Sleep(time.Duration(intervalMin) * time.Minute)
+			servers, _ := store.GetServers()
+			for _, srv := range servers {
+				start := time.Now()
+				online, _ := sshClient.Ping(srv.Host, srv.Port, 5*time.Second)
+				latencyMs := int(time.Since(start).Milliseconds())
+				store.LogPing(srv.ID, online, latencyMs)
+			}
+		}
+	}()
 
 	// Wrap the mux with auth middleware
 	handler := cors(authStore.SetupOrAuthMiddleware(mux))

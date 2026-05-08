@@ -7,14 +7,20 @@ import (
 	"time"
 
 	"github.com/sarchitt/shellhub/internal/auth"
+	"github.com/sarchitt/shellhub/internal/config"
 )
 
 type AuthHandler struct {
 	authStore *auth.AuthStore
+	store     *config.Store
 }
 
-func NewAuthHandler(authStore *auth.AuthStore) *AuthHandler {
-	return &AuthHandler{authStore: authStore}
+func NewAuthHandler(authStore *auth.AuthStore, store ...*config.Store) *AuthHandler {
+	h := &AuthHandler{authStore: authStore}
+	if len(store) > 0 {
+		h.store = store[0]
+	}
+	return h
 }
 
 func (h *AuthHandler) RegisterRoutes(mux *http.ServeMux) {
@@ -23,6 +29,18 @@ func (h *AuthHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/auth/register", h.register)
 	mux.HandleFunc("POST /api/auth/logout", h.logout)
 	mux.HandleFunc("GET /api/auth/login-attempts", h.loginAttempts)
+
+	// Authenticated endpoints (protected by auth middleware)
+	mux.HandleFunc("GET /api/auth/me", h.me)
+	mux.HandleFunc("PUT /api/auth/password", h.changePassword)
+
+	// User management (superadmin only)
+	mux.HandleFunc("GET /api/users", h.listUsers)
+	mux.HandleFunc("POST /api/users", h.createUser)
+	mux.HandleFunc("DELETE /api/users/{id}", h.deleteUser)
+	mux.HandleFunc("PUT /api/users/{id}/role", h.updateUserRole)
+	mux.HandleFunc("GET /api/users/{id}/servers", h.getUserServers)
+	mux.HandleFunc("PUT /api/users/{id}/servers", h.setUserServers)
 }
 
 // status returns whether setup is needed and whether the user is authenticated.
@@ -69,7 +87,7 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.authStore.CreateUser(body.Username, body.Password)
+	user, err := h.authStore.CreateUserWithRole(body.Username, body.Password, "superadmin")
 	if err != nil {
 		writeError(w, 500, "failed to create user: "+err.Error())
 		return
@@ -199,4 +217,228 @@ func (h *AuthHandler) loginAttempts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, attempts)
+}
+
+// --- Authenticated endpoints ---
+
+func authIsSuperAdmin(r *http.Request) bool {
+	return r.Header.Get("X-User-Role") == "superadmin"
+}
+
+// me returns the current authenticated user.
+func (h *AuthHandler) me(w http.ResponseWriter, r *http.Request) {
+	idStr := r.Header.Get("X-User-ID")
+	if idStr == "" {
+		writeError(w, 401, "authentication required")
+		return
+	}
+	id, _ := strconv.Atoi(idStr)
+	user, err := h.authStore.GetUser(id)
+	if err != nil {
+		writeError(w, 404, "user not found")
+		return
+	}
+	writeJSON(w, 200, user)
+}
+
+// changePassword changes the current user's password.
+func (h *AuthHandler) changePassword(w http.ResponseWriter, r *http.Request) {
+	idStr := r.Header.Get("X-User-ID")
+	if idStr == "" {
+		writeError(w, 401, "authentication required")
+		return
+	}
+	id, _ := strconv.Atoi(idStr)
+
+	var body struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if body.OldPassword == "" || body.NewPassword == "" {
+		writeError(w, 400, "old_password and new_password are required")
+		return
+	}
+	if len(body.NewPassword) < 6 {
+		writeError(w, 400, "new password must be at least 6 characters")
+		return
+	}
+
+	if err := h.authStore.ChangePassword(id, body.OldPassword, body.NewPassword); err != nil {
+		if err == auth.ErrInvalidPassword {
+			writeError(w, 403, "current password is incorrect")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "password changed"})
+}
+
+// listUsers returns all users (superadmin only).
+func (h *AuthHandler) listUsers(w http.ResponseWriter, r *http.Request) {
+	if !authIsSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	users, err := h.authStore.GetUsers()
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, users)
+}
+
+// createUser creates a new user (superadmin only).
+func (h *AuthHandler) createUser(w http.ResponseWriter, r *http.Request) {
+	if !authIsSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	var body struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if body.Username == "" || body.Password == "" {
+		writeError(w, 400, "username and password are required")
+		return
+	}
+	if len(body.Password) < 6 {
+		writeError(w, 400, "password must be at least 6 characters")
+		return
+	}
+	if body.Role == "" {
+		body.Role = "user"
+	}
+
+	user, err := h.authStore.CreateUserWithRole(body.Username, body.Password, body.Role)
+	if err != nil {
+		writeError(w, 500, "failed to create user: "+err.Error())
+		return
+	}
+	writeJSON(w, 201, user)
+}
+
+// deleteUser deletes a user (superadmin only, cannot delete self).
+func (h *AuthHandler) deleteUser(w http.ResponseWriter, r *http.Request) {
+	if !authIsSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		writeError(w, 400, "invalid user id")
+		return
+	}
+
+	// Cannot delete yourself
+	currentID, _ := strconv.Atoi(r.Header.Get("X-User-ID"))
+	if id == currentID {
+		writeError(w, 400, "cannot delete your own account")
+		return
+	}
+
+	if err := h.authStore.DeleteUser(id); err != nil {
+		if err == auth.ErrUserNotFound {
+			writeError(w, 404, "user not found")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	w.WriteHeader(204)
+}
+
+// updateUserRole updates a user's role (superadmin only).
+func (h *AuthHandler) updateUserRole(w http.ResponseWriter, r *http.Request) {
+	if !authIsSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		writeError(w, 400, "invalid user id")
+		return
+	}
+	var body struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if body.Role == "" {
+		writeError(w, 400, "role is required")
+		return
+	}
+
+	if err := h.authStore.UpdateUserRole(id, body.Role); err != nil {
+		if err == auth.ErrUserNotFound {
+			writeError(w, 404, "user not found")
+			return
+		}
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "role updated"})
+}
+
+// getUserServers returns the server IDs assigned to a user.
+func (h *AuthHandler) getUserServers(w http.ResponseWriter, r *http.Request) {
+	if !authIsSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	if h.store == nil {
+		writeError(w, 500, "store not configured")
+		return
+	}
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		writeError(w, 400, "invalid user id")
+		return
+	}
+	ids, err := h.store.GetUserServerIDs(id)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]any{"server_ids": ids})
+}
+
+// setUserServers sets the server IDs assigned to a user.
+func (h *AuthHandler) setUserServers(w http.ResponseWriter, r *http.Request) {
+	if !authIsSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	if h.store == nil {
+		writeError(w, 500, "store not configured")
+		return
+	}
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil {
+		writeError(w, 400, "invalid user id")
+		return
+	}
+	var body struct {
+		ServerIDs []int `json:"server_ids"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+	if err := h.store.SetUserServers(id, body.ServerIDs); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]string{"status": "servers updated"})
 }

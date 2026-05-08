@@ -27,6 +27,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+  if (user?.role !== 'superadmin') {
+    return <Navigate to="/" replace />
+  }
+  return <>{children}</>
+}
+
 function AppRoutes() {
   return (
     <Routes>
@@ -34,9 +42,9 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/terminal/:id" element={<ProtectedRoute><Terminal /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-      <Route path="/audit" element={<ProtectedRoute><Audit /></ProtectedRoute>} />
-      <Route path="/recordings" element={<ProtectedRoute><Recordings /></ProtectedRoute>} />
-      <Route path="/metrics" element={<ProtectedRoute><Metrics /></ProtectedRoute>} />
+      <Route path="/audit" element={<ProtectedRoute><SuperAdminRoute><Audit /></SuperAdminRoute></ProtectedRoute>} />
+      <Route path="/recordings" element={<ProtectedRoute><SuperAdminRoute><Recordings /></SuperAdminRoute></ProtectedRoute>} />
+      <Route path="/metrics" element={<ProtectedRoute><SuperAdminRoute><Metrics /></SuperAdminRoute></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

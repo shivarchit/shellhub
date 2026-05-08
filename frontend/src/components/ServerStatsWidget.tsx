@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, memo } from 'react'
 import type { ServerStats } from '../lib/types'
 import { getServerStats } from '../lib/api'
 
@@ -59,7 +59,7 @@ function formatMem(mb: number): string {
   return `${mb} MB`
 }
 
-export default function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
+function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
   const [stats, setStats] = useState<ServerStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -211,3 +211,5 @@ export default function ServerStatsWidget({ serverId, online }: ServerStatsWidge
     </div>
   )
 }
+
+export default memo(ServerStatsWidget)

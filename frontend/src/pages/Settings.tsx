@@ -1,12 +1,20 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable } from '../lib/api'
-import type { AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput } from '../lib/types'
+import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable, getUsers, createNewUser, deleteUser, updateUserRole, getUserServers, updateUserServers, changePassword, getServers } from '../lib/api'
+import type { AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, Server } from '../lib/types'
 import { useAuth } from '../lib/auth'
+
+interface UserRecord {
+  id: number
+  username: string
+  role: string
+  created_at: string
+  last_login: string
+}
 
 export default function Settings() {
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const [pingInterval, setPingInterval] = useState('30')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -16,7 +24,8 @@ export default function Settings() {
   const [importResult, setImportResult] = useState('')
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([])
-  const [activeTab, setActiveTab] = useState<'general' | 'commands' | 'security' | 'database'>('general')
+  const tabs = ['general', 'commands', 'security', ...(user?.role === 'superadmin' ? ['database', 'users'] : [])] as const
+  const [activeTab, setActiveTab] = useState<string>('general')
   const [globalCmds, setGlobalCmds] = useState<GlobalCommand[]>([])
   const [editingGlobal, setEditingGlobal] = useState<GlobalCommand | null>(null)
   const [showGlobalForm, setShowGlobalForm] = useState(false)
@@ -31,6 +40,27 @@ export default function Settings() {
   const [dbOffset, setDbOffset] = useState(0)
   const [dbLoading, setDbLoading] = useState(false)
 
+  // Change password state
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [pwChanging, setPwChanging] = useState(false)
+  const [pwResult, setPwResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+
+  // Users tab state
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
+  const [showCreateUser, setShowCreateUser] = useState(false)
+  const [newUsername, setNewUsername] = useState('')
+  const [newUserPassword, setNewUserPassword] = useState('')
+  const [newUserRole, setNewUserRole] = useState('user')
+  const [creatingUser, setCreatingUser] = useState(false)
+  const [userError, setUserError] = useState('')
+  const [managingServersFor, setManagingServersFor] = useState<UserRecord | null>(null)
+  const [allServers, setAllServers] = useState<Server[]>([])
+  const [userServerIds, setUserServerIds] = useState<number[]>([])
+  const [savingServers, setSavingServers] = useState(false)
+
   const actionColors: Record<string, string> = {
     server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
     server_update: 'bg-surface-600 text-accent-blue border-border',
@@ -42,6 +72,11 @@ export default function Settings() {
 
   const fetchGlobalCmds = () => {
     getGlobalCommands().then(setGlobalCmds).catch(() => setGlobalCmds([]))
+  }
+
+  const fetchUsers = () => {
+    setUsersLoading(true)
+    getUsers().then(setUsers).catch(() => setUsers([])).finally(() => setUsersLoading(false))
   }
 
   useEffect(() => {
@@ -153,6 +188,105 @@ export default function Settings() {
     }
   }
 
+  const handleChangePassword = async () => {
+    setPwResult(null)
+    if (newPassword.length < 6) {
+      setPwResult({ type: 'error', message: 'New password must be at least 6 characters' })
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwResult({ type: 'error', message: 'Passwords do not match' })
+      return
+    }
+    setPwChanging(true)
+    try {
+      await changePassword(oldPassword, newPassword)
+      setPwResult({ type: 'success', message: 'Password changed successfully' })
+      setOldPassword('')
+      setNewPassword('')
+      setConfirmPassword('')
+    } catch (e: any) {
+      setPwResult({ type: 'error', message: e.message || 'Failed to change password' })
+    } finally {
+      setPwChanging(false)
+    }
+  }
+
+  const handleCreateUser = async () => {
+    setUserError('')
+    if (!newUsername || !newUserPassword) {
+      setUserError('Username and password are required')
+      return
+    }
+    if (newUserPassword.length < 6) {
+      setUserError('Password must be at least 6 characters')
+      return
+    }
+    setCreatingUser(true)
+    try {
+      await createNewUser(newUsername, newUserPassword, newUserRole)
+      setShowCreateUser(false)
+      setNewUsername('')
+      setNewUserPassword('')
+      setNewUserRole('user')
+      fetchUsers()
+    } catch (e: any) {
+      setUserError(e.message || 'Failed to create user')
+    } finally {
+      setCreatingUser(false)
+    }
+  }
+
+  const handleDeleteUser = async (id: number) => {
+    if (!window.confirm('Delete this user?')) return
+    try {
+      await deleteUser(id)
+      fetchUsers()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleRoleChange = async (id: number, role: string) => {
+    try {
+      await updateUserRole(id, role)
+      fetchUsers()
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleManageServers = async (u: UserRecord) => {
+    setManagingServersFor(u)
+    try {
+      const [servers, ids] = await Promise.all([getServers(), getUserServers(u.id)])
+      setAllServers(servers)
+      setUserServerIds(ids)
+    } catch {
+      setAllServers([])
+      setUserServerIds([])
+    }
+  }
+
+  const handleSaveUserServers = async () => {
+    if (!managingServersFor) return
+    setSavingServers(true)
+    try {
+      await updateUserServers(managingServersFor.id, userServerIds)
+      setManagingServersFor(null)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSavingServers(false)
+    }
+  }
+
+  const toggleServerForUser = (serverId: number) => {
+    setUserServerIds((prev) =>
+      prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]
+    )
+  }
+
   return (
     <div className="flex flex-col h-screen bg-surface-900">
       {/* Header */}
@@ -185,13 +319,16 @@ export default function Settings() {
 
       {/* Tabs */}
       <div className="flex gap-1 px-6 pt-4">
-        {(['general', 'commands', 'security', 'database'] as const).map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab}
             onClick={() => {
               setActiveTab(tab)
               if (tab === 'database' && dbTables.length === 0) {
                 getDbTables().then(setDbTables).catch(() => setDbTables([]))
+              }
+              if (tab === 'users' && users.length === 0) {
+                fetchUsers()
               }
             }}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
@@ -200,7 +337,7 @@ export default function Settings() {
                 : 'text-text-muted hover:text-text-secondary'
             }`}
           >
-            {tab === 'general' ? 'General' : tab === 'commands' ? 'Commands' : tab === 'security' ? 'Security & Audit' : 'Database'}
+            {tab === 'general' ? 'General' : tab === 'commands' ? 'Commands' : tab === 'security' ? 'Security & Audit' : tab === 'database' ? 'Database' : 'Users'}
           </button>
         ))}
       </div>
@@ -515,8 +652,59 @@ export default function Settings() {
 
           {activeTab === 'security' && (
             <>
-              {/* Login Audit section */}
+              {/* Change Password section */}
               <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Change Password
+                </h2>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">Old Password</label>
+                    <input
+                      type="password"
+                      value={oldPassword}
+                      onChange={(e) => setOldPassword(e.target.value)}
+                      className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                      placeholder="Current password"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">New Password</label>
+                    <input
+                      type="password"
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
+                      className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                      placeholder="New password (min 6 characters)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-text-secondary mb-1">Confirm New Password</label>
+                    <input
+                      type="password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                      placeholder="Confirm new password"
+                    />
+                  </div>
+                  <button
+                    onClick={handleChangePassword}
+                    disabled={pwChanging}
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                  >
+                    {pwChanging ? 'Changing...' : 'Change Password'}
+                  </button>
+                  {pwResult && (
+                    <p className={`text-sm ${pwResult.type === 'success' ? 'text-accent-green' : 'text-accent-red'}`}>
+                      {pwResult.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Login Audit section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
                 <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
                   Login Attempts
                 </h2>
@@ -698,6 +886,185 @@ export default function Settings() {
                   </div>
                 )}
               </div>
+            </>
+          )}
+
+          {activeTab === 'users' && (
+            <>
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+                    User Management
+                  </h2>
+                  <button
+                    onClick={() => { setShowCreateUser(true); setUserError('') }}
+                    className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
+                  >
+                    + Create User
+                  </button>
+                </div>
+
+                {showCreateUser && (
+                  <div className="mb-4 p-4 bg-surface-900 border border-border rounded-lg space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-text-secondary mb-1">Username</label>
+                        <input
+                          type="text"
+                          value={newUsername}
+                          onChange={(e) => setNewUsername(e.target.value)}
+                          className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                          placeholder="Username"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-text-secondary mb-1">Role</label>
+                        <select
+                          value={newUserRole}
+                          onChange={(e) => setNewUserRole(e.target.value)}
+                          className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                        >
+                          <option value="user">User</option>
+                          <option value="superadmin">Superadmin</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-text-secondary mb-1">Password</label>
+                      <input
+                        type="password"
+                        value={newUserPassword}
+                        onChange={(e) => setNewUserPassword(e.target.value)}
+                        className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                        placeholder="Min 6 characters"
+                      />
+                    </div>
+                    {userError && (
+                      <p className="text-xs text-accent-red">{userError}</p>
+                    )}
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={handleCreateUser}
+                        disabled={creatingUser}
+                        className="px-4 py-1.5 text-xs font-medium text-white bg-accent-blue rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+                      >
+                        {creatingUser ? 'Creating...' : 'Create'}
+                      </button>
+                      <button
+                        onClick={() => { setShowCreateUser(false); setUserError('') }}
+                        className="px-3 py-1.5 text-xs font-medium text-text-secondary bg-surface-700 rounded-md hover:bg-surface-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {usersLoading ? (
+                  <div className="text-sm text-text-muted animate-pulse">Loading users...</div>
+                ) : users.length === 0 ? (
+                  <p className="text-sm text-text-muted">No users found.</p>
+                ) : (
+                  <div className="overflow-x-auto border border-border rounded-lg">
+                    <table className="w-full text-xs">
+                      <thead className="bg-surface-700">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-semibold text-text-secondary">Username</th>
+                          <th className="px-3 py-2 text-left font-semibold text-text-secondary">Role</th>
+                          <th className="px-3 py-2 text-left font-semibold text-text-secondary">Created</th>
+                          <th className="px-3 py-2 text-left font-semibold text-text-secondary">Last Login</th>
+                          <th className="px-3 py-2 text-right font-semibold text-text-secondary">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {users.map((u) => (
+                          <tr key={u.id} className="border-t border-border/50 hover:bg-surface-700/50">
+                            <td className="px-3 py-2 text-text-primary font-medium">{u.username}</td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={u.role}
+                                onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                disabled={u.id === user?.id}
+                                className="px-2 py-0.5 text-xs bg-surface-800 border border-border rounded text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                              >
+                                <option value="user">User</option>
+                                <option value="superadmin">Superadmin</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 text-text-muted">{u.created_at}</td>
+                            <td className="px-3 py-2 text-text-muted">{u.last_login || 'Never'}</td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                <button
+                                  onClick={() => handleManageServers(u)}
+                                  className="px-2 py-1 text-xs text-accent-blue hover:opacity-80 transition-opacity"
+                                >
+                                  Servers
+                                </button>
+                                {u.id !== user?.id && (
+                                  <button
+                                    onClick={() => handleDeleteUser(u.id)}
+                                    className="px-2 py-1 text-xs text-accent-red hover:opacity-80 transition-opacity"
+                                  >
+                                    Delete
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Manage Servers Modal */}
+              {managingServersFor && (
+                <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+                      Server Access for {managingServersFor.username}
+                    </h2>
+                    <button
+                      onClick={() => setManagingServersFor(null)}
+                      className="px-3 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-muted mb-3">
+                    Select which servers this user can access.
+                  </p>
+                  {allServers.length === 0 ? (
+                    <p className="text-sm text-text-muted">No servers available.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-64 overflow-y-auto">
+                      {allServers.map((s) => (
+                        <label key={s.id} className="flex items-center gap-2 px-3 py-2 bg-surface-700 rounded-lg cursor-pointer hover:bg-surface-600 transition-colors">
+                          <input
+                            type="checkbox"
+                            checked={userServerIds.includes(s.id)}
+                            onChange={() => toggleServerForUser(s.id)}
+                            className="accent-accent-blue"
+                          />
+                          <span className="text-sm text-text-primary">{s.name}</span>
+                          <span className="text-xs text-text-muted font-mono ml-auto">{s.host}:{s.port}</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-4">
+                    <button
+                      onClick={handleSaveUserServers}
+                      disabled={savingServers}
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                    >
+                      {savingServers ? 'Saving...' : 'Save Server Access'}
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>

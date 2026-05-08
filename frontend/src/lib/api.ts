@@ -135,3 +135,28 @@ export const getServerStats = (id: number) =>
 
 export const getMetrics = (range: string = '7d') =>
   request<MetricsResponse>(`/metrics?range=${range}`)
+
+// User management
+export const getCurrentUser = () =>
+  request<{ id: number; username: string; role: string }>('/auth/me')
+
+export const changePassword = (oldPassword: string, newPassword: string) =>
+  request<void>('/auth/password', { method: 'PUT', body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }) })
+
+export const getUsers = () =>
+  request<Array<{ id: number; username: string; role: string; created_at: string; last_login: string }>>('/users')
+
+export const createNewUser = (username: string, password: string, role: string) =>
+  request<{ id: number; username: string; role: string }>('/users', { method: 'POST', body: JSON.stringify({ username, password, role }) })
+
+export const deleteUser = (id: number) =>
+  request<void>(`/users/${id}`, { method: 'DELETE' })
+
+export const updateUserRole = (id: number, role: string) =>
+  request<void>(`/users/${id}/role`, { method: 'PUT', body: JSON.stringify({ role }) })
+
+export const getUserServers = (id: number) =>
+  request<number[]>(`/users/${id}/servers`)
+
+export const updateUserServers = (id: number, serverIds: number[]) =>
+  request<void>(`/users/${id}/servers`, { method: 'PUT', body: JSON.stringify({ server_ids: serverIds }) })

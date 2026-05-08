@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { Server } from '../lib/types'
 import { cn } from '../lib/utils'
 import { reorderServers } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import StatusDot from './StatusDot'
 import Logo from './Logo'
 import {
@@ -115,6 +116,7 @@ export default function Sidebar({
   onReorder,
 }: SidebarProps) {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -280,40 +282,46 @@ export default function Sidebar({
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-border space-y-2">
-        <button
-          onClick={() => navigate('/recordings')}
-          className="w-full py-2 text-sm text-text-muted flex items-center justify-center gap-2 border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
-            <circle cx="8" cy="8" r="2.5" fill="currentColor" />
-          </svg>
-          Recordings
-        </button>
-        <button
-          onClick={() => navigate('/metrics')}
-          className="w-full py-2 text-sm text-text-secondary border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors flex items-center justify-center gap-2"
-        >
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-            <path d="M2 14V8h3v6H2zM6.5 14V4h3v10h-3zM11 14V1h3v13h-3z" stroke="currentColor" strokeWidth="1" fill="none" />
-          </svg>
-          Metrics
-        </button>
+        {user?.role === 'superadmin' && (
+          <button
+            onClick={() => navigate('/recordings')}
+            className="w-full py-2 text-sm text-text-muted flex items-center justify-center gap-2 border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="8" cy="8" r="2.5" fill="currentColor" />
+            </svg>
+            Recordings
+          </button>
+        )}
+        {user?.role === 'superadmin' && (
+          <button
+            onClick={() => navigate('/metrics')}
+            className="w-full py-2 text-sm text-text-secondary border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors flex items-center justify-center gap-2"
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M2 14V8h3v6H2zM6.5 14V4h3v10h-3zM11 14V1h3v13h-3z" stroke="currentColor" strokeWidth="1" fill="none" />
+            </svg>
+            Metrics
+          </button>
+        )}
         <button
           onClick={onAdd}
           className="w-full py-2 text-sm text-text-secondary border border-dashed border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
         >
           + Add Server
         </button>
-        <button
-          onClick={() => navigate('/audit')}
-          className="w-full py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"
-        >
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-            <path d="M2 3h12M2 7h8M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-          </svg>
-          Audit Trail
-        </button>
+        {user?.role === 'superadmin' && (
+          <button
+            onClick={() => navigate('/audit')}
+            className="w-full py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <path d="M2 3h12M2 7h8M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+            Audit Trail
+          </button>
+        )}
       </div>
     </aside>
   )

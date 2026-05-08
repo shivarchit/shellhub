@@ -62,8 +62,29 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/db/query", h.queryTable)
 }
 
+func getUserFromRequest(r *http.Request) (int, string) {
+	id, _ := strconv.Atoi(r.Header.Get("X-User-ID"))
+	return id, r.Header.Get("X-Username")
+}
+
+func isSuperAdmin(r *http.Request) bool {
+	return r.Header.Get("X-User-Role") == "superadmin"
+}
+
 func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
-	servers, err := h.store.GetServers()
+	userID, _ := getUserFromRequest(r)
+
+	var servers []config.Server
+	var err error
+
+	if isSuperAdmin(r) || userID == 0 {
+		// Superadmin or unauthenticated (setup mode) sees all servers
+		servers, err = h.store.GetServers()
+	} else {
+		// Regular user only sees assigned servers
+		servers, err = h.store.GetServersForUser(userID)
+	}
+
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
@@ -97,7 +118,8 @@ func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
-	h.store.LogAudit("server_create", &id, srv.Name)
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("server_create", &id, srv.Name, userID, username)
 	created, _ := h.store.GetServer(id)
 	writeJSON(w, 201, created)
 }
@@ -136,7 +158,8 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
-	h.store.LogAudit("server_update", &id, srv.Name)
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("server_update", &id, srv.Name, userID, username)
 	updated, _ := h.store.GetServer(id)
 	writeJSON(w, 200, updated)
 }
@@ -155,7 +178,8 @@ func (h *Handler) deleteServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
-	h.store.LogAudit("server_delete", &id, "")
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("server_delete", &id, "", userID, username)
 	w.WriteHeader(204)
 }
 
@@ -194,6 +218,13 @@ func (h *Handler) pingServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid server id")
 		return
 	}
+
+	// Access control
+	if !h.userCanAccessServer(r, id) {
+		writeError(w, 403, "access denied")
+		return
+	}
+
 	srv, err := h.store.GetServer(id)
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
@@ -213,6 +244,13 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "invalid server id")
 		return
 	}
+
+	// Access control
+	if !h.userCanAccessServer(r, id) {
+		writeError(w, 403, "access denied")
+		return
+	}
+
 	srv, err := h.store.GetServer(id)
 	if err != nil {
 		if errors.Is(err, config.ErrNotFound) {
@@ -233,6 +271,7 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
+	userID, username := getUserFromRequest(r)
 	start := time.Now()
 	output, exitCode, err := h.executor.Execute(*srv, body.Command)
 	durationMs := int(time.Since(start).Milliseconds())
@@ -248,9 +287,22 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		Output:      output,
 		ExitCode:    exitCode,
 		DurationMs:  durationMs,
+		UserID:      userID,
+		Username:    username,
 	})
-	h.store.LogAudit("command_exec", &id, body.Command)
+	h.store.LogAuditWithUser("command_exec", &id, body.Command, userID, username)
 	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode, "duration_ms": durationMs})
+}
+
+// userCanAccessServer checks if the current user can access the given server.
+// Superadmins and unauthenticated users in setup mode always have access.
+func (h *Handler) userCanAccessServer(r *http.Request, serverID int) bool {
+	userID, _ := getUserFromRequest(r)
+	if userID == 0 || isSuperAdmin(r) {
+		return true
+	}
+	hasAccess, _ := h.store.UserHasServerAccess(userID, serverID)
+	return hasAccess
 }
 
 // decryptServerCredentials decrypts password and private_key in place.
@@ -424,7 +476,8 @@ func (h *Handler) createGlobalCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd.ID = id
-	h.store.LogAudit("global_command_create", nil, cmd.Name)
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("global_command_create", nil, cmd.Name, userID, username)
 	writeJSON(w, 201, cmd)
 }
 
@@ -448,7 +501,8 @@ func (h *Handler) updateGlobalCommand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cmd.ID = id
-	h.store.LogAudit("global_command_update", nil, cmd.Name)
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("global_command_update", nil, cmd.Name, userID, username)
 	writeJSON(w, 200, cmd)
 }
 
@@ -466,7 +520,8 @@ func (h *Handler) deleteGlobalCommand(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
-	h.store.LogAudit("global_command_delete", nil, "")
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("global_command_delete", nil, "", userID, username)
 	w.WriteHeader(204)
 }
 

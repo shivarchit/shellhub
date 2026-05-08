@@ -32,6 +32,7 @@ type User struct {
 	ID           int    `json:"id"`
 	Username     string `json:"username"`
 	PasswordHash string `json:"-"`
+	Role         string `json:"role"`
 	CreatedAt    string `json:"created_at"`
 	LastLogin    string `json:"last_login"`
 }
@@ -81,6 +82,9 @@ func NewAuthStore(db *sql.DB) (*AuthStore, error) {
 	`); err != nil {
 		return nil, fmt.Errorf("create login_attempts table: %w", err)
 	}
+
+	// Add role column (harmlessly errors if already exists)
+	s.db.Exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`)
 
 	// Generate or load JWT secret from app_settings
 	secret, err := s.getOrCreateSetting("jwt_secret", func() string {
@@ -138,11 +142,16 @@ func (s *AuthStore) EnsureDefaultAdmin() error {
 	if hasUsers {
 		return nil
 	}
-	_, err = s.CreateUser("admin", "admin123")
+	user, err := s.CreateUser("admin", "admin123")
+	if err != nil {
+		return err
+	}
+	// Set the default admin as superadmin
+	_, err = s.db.Exec(`UPDATE users SET role = 'superadmin' WHERE id = ?`, user.ID)
 	return err
 }
 
-// CreateUser creates a new user with bcrypt-hashed password.
+// CreateUser creates a new user with bcrypt-hashed password (role defaults to 'user').
 func (s *AuthStore) CreateUser(username, password string) (*User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -150,7 +159,7 @@ func (s *AuthStore) CreateUser(username, password string) (*User, error) {
 	}
 
 	res, err := s.db.Exec(
-		`INSERT INTO users (username, password_hash) VALUES (?, ?)`,
+		`INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'user')`,
 		username, string(hash),
 	)
 	if err != nil {
@@ -161,6 +170,33 @@ func (s *AuthStore) CreateUser(username, password string) (*User, error) {
 	return &User{
 		ID:       int(id),
 		Username: username,
+		Role:     "user",
+	}, nil
+}
+
+// CreateUserWithRole creates a new user with the specified role.
+func (s *AuthStore) CreateUserWithRole(username, password, role string) (*User, error) {
+	if role == "" {
+		role = "user"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := s.db.Exec(
+		`INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)`,
+		username, string(hash), role,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	id, _ := res.LastInsertId()
+	return &User{
+		ID:       int(id),
+		Username: username,
+		Role:     role,
 	}, nil
 }
 
@@ -168,9 +204,9 @@ func (s *AuthStore) CreateUser(username, password string) (*User, error) {
 func (s *AuthStore) Authenticate(username, password string) (*User, error) {
 	var user User
 	err := s.db.QueryRow(
-		`SELECT id, username, password_hash, created_at, COALESCE(last_login, '') FROM users WHERE username = ?`,
+		`SELECT id, username, password_hash, COALESCE(role, 'user'), created_at, COALESCE(last_login, '') FROM users WHERE username = ?`,
 		username,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.CreatedAt, &user.LastLogin)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.CreatedAt, &user.LastLogin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
@@ -245,6 +281,7 @@ func (s *AuthStore) GetLoginAttempts(limit, offset int) ([]LoginAttempt, error) 
 type TokenClaims struct {
 	UserID   int    `json:"uid"`
 	Username string `json:"sub"`
+	Role     string `json:"role"`
 	Exp      int64  `json:"exp"`
 }
 
@@ -253,6 +290,7 @@ func (s *AuthStore) GenerateToken(user *User) (string, error) {
 	claims := TokenClaims{
 		UserID:   user.ID,
 		Username: user.Username,
+		Role:     user.Role,
 		Exp:      time.Now().Add(24 * time.Hour).Unix(),
 	}
 	payload, _ := json.Marshal(claims)
@@ -326,6 +364,97 @@ func hmacSHA256(key, data []byte) []byte {
 	outer.Write(opad)
 	outer.Write(innerHash)
 	return outer.Sum(nil)
+}
+
+// --- User Management ---
+
+// ChangePassword changes a user's password after verifying the old one.
+func (s *AuthStore) ChangePassword(userID int, oldPassword, newPassword string) error {
+	var hash string
+	err := s.db.QueryRow(`SELECT password_hash FROM users WHERE id = ?`, userID).Scan(&hash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(oldPassword)); err != nil {
+		return ErrInvalidPassword
+	}
+
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+
+	_, err = s.db.Exec(`UPDATE users SET password_hash = ? WHERE id = ?`, string(newHash), userID)
+	return err
+}
+
+// GetUsers returns all users.
+func (s *AuthStore) GetUsers() ([]User, error) {
+	rows, err := s.db.Query(
+		`SELECT id, username, COALESCE(role, 'user'), created_at, COALESCE(last_login, '') FROM users ORDER BY id`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt, &u.LastLogin); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	if users == nil {
+		users = []User{}
+	}
+	return users, rows.Err()
+}
+
+// GetUser returns a single user by ID.
+func (s *AuthStore) GetUser(id int) (*User, error) {
+	var u User
+	err := s.db.QueryRow(
+		`SELECT id, username, COALESCE(role, 'user'), created_at, COALESCE(last_login, '') FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt, &u.LastLogin)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, err
+	}
+	return &u, nil
+}
+
+// DeleteUser deletes a user by ID.
+func (s *AuthStore) DeleteUser(id int) error {
+	res, err := s.db.Exec(`DELETE FROM users WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+// UpdateUserRole updates the role of a user.
+func (s *AuthStore) UpdateUserRole(id int, role string) error {
+	res, err := s.db.Exec(`UPDATE users SET role = ? WHERE id = ?`, role, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 // --- Encryption for credentials ---
@@ -560,6 +689,12 @@ func (s *AuthStore) AuthMiddleware(next http.Handler) http.Handler {
 		// Store claims in request context via header (simple approach)
 		r.Header.Set("X-User-ID", fmt.Sprintf("%d", claims.UserID))
 		r.Header.Set("X-Username", claims.Username)
+		// Backward compatibility: empty role in old tokens treated as "user"
+		role := claims.Role
+		if role == "" {
+			role = "user"
+		}
+		r.Header.Set("X-User-Role", role)
 
 		next.ServeHTTP(w, r)
 	})

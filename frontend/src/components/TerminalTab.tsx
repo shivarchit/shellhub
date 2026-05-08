@@ -79,6 +79,14 @@ export default function TerminalTab({
       term.open(terminalRef.current)
       requestAnimationFrame(() => fitAddon.fit())
 
+      // Auto-copy on selection
+      term.onSelectionChange(() => {
+        const sel = term.getSelection()
+        if (sel) {
+          navigator.clipboard.writeText(sel).catch(() => {})
+        }
+      })
+
       // Right-click paste
       terminalRef.current.addEventListener('contextmenu', (e) => {
         e.preventDefault()
@@ -142,6 +150,16 @@ export default function TerminalTab({
     // Keyboard shortcuts
     term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
       if (e.type !== 'keydown') return true
+      // Ctrl+C: copy if text selected, otherwise send SIGINT
+      if (e.ctrlKey && !e.shiftKey && e.key === 'c' && e.type === 'keydown') {
+        const sel = term.getSelection()
+        if (sel) {
+          navigator.clipboard.writeText(sel)
+          term.clearSelection()
+          return false // don't send to terminal
+        }
+        // no selection - let SIGINT pass through
+      }
       // Ctrl+Shift+C to copy
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
         const sel = term.getSelection()

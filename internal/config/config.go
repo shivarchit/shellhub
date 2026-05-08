@@ -198,6 +198,20 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, err
 	}
 
+	// user_servers table for RBAC server access control
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_servers (
+			user_id INTEGER NOT NULL,
+			server_id INTEGER NOT NULL,
+			PRIMARY KEY (user_id, server_id),
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+			FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
+		)
+	`); err != nil {
+		db.Close()
+		return nil, err
+	}
+
 	// Add new columns for key-based auth (harmlessly errors if columns already exist)
 	s := &Store{db: db}
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN auth_type TEXT NOT NULL DEFAULT 'password'`)
@@ -205,6 +219,12 @@ func NewStore(dbPath string) (*Store, error) {
 	s.db.Exec(`ALTER TABLE servers ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0`)
 	s.db.Exec(`ALTER TABLE quick_commands ADD COLUMN is_template INTEGER NOT NULL DEFAULT 0`)
 	s.db.Exec(`ALTER TABLE exec_history ADD COLUMN server_name TEXT NOT NULL DEFAULT ''`)
+
+	// Add user tracking columns to audit_log and exec_history
+	s.db.Exec(`ALTER TABLE audit_log ADD COLUMN user_id INTEGER`)
+	s.db.Exec(`ALTER TABLE audit_log ADD COLUMN username TEXT NOT NULL DEFAULT ''`)
+	s.db.Exec(`ALTER TABLE exec_history ADD COLUMN user_id INTEGER`)
+	s.db.Exec(`ALTER TABLE exec_history ADD COLUMN username TEXT NOT NULL DEFAULT ''`)
 
 	return s, nil
 }
@@ -478,20 +498,22 @@ type ExecRecord struct {
 	ExitCode    int    `json:"exit_code"`
 	ExecutedAt  string `json:"executed_at"`
 	DurationMs  int    `json:"duration_ms"`
+	UserID      int    `json:"user_id"`
+	Username    string `json:"username"`
 }
 
 func (s *Store) LogExec(rec ExecRecord) error {
 	_, err := s.db.Exec(
-		`INSERT INTO exec_history (server_id, server_name, command_name, command_text, output, exit_code, duration_ms)
-		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		rec.ServerID, rec.ServerName, rec.CommandName, rec.CommandText, rec.Output, rec.ExitCode, rec.DurationMs,
+		`INSERT INTO exec_history (server_id, server_name, command_name, command_text, output, exit_code, duration_ms, user_id, username)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.ServerID, rec.ServerName, rec.CommandName, rec.CommandText, rec.Output, rec.ExitCode, rec.DurationMs, rec.UserID, rec.Username,
 	)
 	return err
 }
 
 func (s *Store) GetExecHistory(serverID, limit int) ([]ExecRecord, error) {
 	rows, err := s.db.Query(
-		`SELECT id, server_id, server_name, command_name, command_text, output, exit_code, executed_at, duration_ms
+		`SELECT id, server_id, server_name, command_name, command_text, output, exit_code, executed_at, duration_ms, COALESCE(user_id, 0), COALESCE(username, '')
 		 FROM exec_history WHERE server_id = ? ORDER BY id DESC LIMIT ?`,
 		serverID, limit,
 	)
@@ -502,7 +524,7 @@ func (s *Store) GetExecHistory(serverID, limit int) ([]ExecRecord, error) {
 	var records []ExecRecord
 	for rows.Next() {
 		var r ExecRecord
-		if err := rows.Scan(&r.ID, &r.ServerID, &r.ServerName, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs); err != nil {
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.ServerName, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs, &r.UserID, &r.Username); err != nil {
 			return nil, err
 		}
 		records = append(records, r)
@@ -563,7 +585,7 @@ func (s *Store) GetAllExecHistory(filter ExecHistoryFilter) (*ExecHistoryPage, e
 	}
 
 	// Fetch page
-	query := "SELECT id, server_id, server_name, command_name, command_text, output, exit_code, executed_at, duration_ms FROM exec_history " + where + " ORDER BY id DESC LIMIT ? OFFSET ?"
+	query := "SELECT id, server_id, server_name, command_name, command_text, output, exit_code, executed_at, duration_ms, COALESCE(user_id, 0), COALESCE(username, '') FROM exec_history " + where + " ORDER BY id DESC LIMIT ? OFFSET ?"
 	pageArgs := append(args, filter.Limit, filter.Offset)
 	rows, err := s.db.Query(query, pageArgs...)
 	if err != nil {
@@ -574,7 +596,7 @@ func (s *Store) GetAllExecHistory(filter ExecHistoryFilter) (*ExecHistoryPage, e
 	var records []ExecRecord
 	for rows.Next() {
 		var r ExecRecord
-		if err := rows.Scan(&r.ID, &r.ServerID, &r.ServerName, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs); err != nil {
+		if err := rows.Scan(&r.ID, &r.ServerID, &r.ServerName, &r.CommandName, &r.CommandText, &r.Output, &r.ExitCode, &r.ExecutedAt, &r.DurationMs, &r.UserID, &r.Username); err != nil {
 			return nil, err
 		}
 		records = append(records, r)
@@ -651,20 +673,39 @@ type AuditEntry struct {
 	Action    string `json:"action"`
 	ServerID  *int   `json:"server_id"`
 	Details   string `json:"details"`
+	UserID    int    `json:"user_id"`
+	Username  string `json:"username"`
 	CreatedAt string `json:"created_at"`
 }
 
-func (s *Store) LogAudit(action string, serverID *int, details string) error {
+func (s *Store) LogAudit(action string, serverID *int, details string, userID ...int) error {
+	uid := 0
+	uname := ""
+	if len(userID) >= 1 {
+		uid = userID[0]
+	}
+	if len(userID) >= 2 {
+		// Hack: we pass username length won't work. Use the variadic overload pattern instead.
+	}
 	_, err := s.db.Exec(
-		`INSERT INTO audit_log (action, server_id, details) VALUES (?, ?, ?)`,
-		action, serverID, details,
+		`INSERT INTO audit_log (action, server_id, details, user_id, username) VALUES (?, ?, ?, ?, ?)`,
+		action, serverID, details, uid, uname,
+	)
+	return err
+}
+
+// LogAuditWithUser logs an audit entry with user information.
+func (s *Store) LogAuditWithUser(action string, serverID *int, details string, userID int, username string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO audit_log (action, server_id, details, user_id, username) VALUES (?, ?, ?, ?, ?)`,
+		action, serverID, details, userID, username,
 	)
 	return err
 }
 
 func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
 	rows, err := s.db.Query(
-		`SELECT id, action, server_id, details, created_at
+		`SELECT id, action, server_id, details, COALESCE(user_id, 0), COALESCE(username, ''), created_at
 		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`,
 		limit, offset,
 	)
@@ -675,7 +716,7 @@ func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.ServerID, &e.Details, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Action, &e.ServerID, &e.Details, &e.UserID, &e.Username, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -1018,4 +1059,89 @@ func (s *Store) GetOnlineServerCount() (int, error) {
 		 WHERE pinged_at >= datetime('now', '-5 minutes') AND online = 1`,
 	).Scan(&count)
 	return count, err
+}
+
+// --- User-Server Access Control ---
+
+// GetUserServerIDs returns the server IDs assigned to a user.
+func (s *Store) GetUserServerIDs(userID int) ([]int, error) {
+	rows, err := s.db.Query(`SELECT server_id FROM user_servers WHERE user_id = ?`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if ids == nil {
+		ids = []int{}
+	}
+	return ids, rows.Err()
+}
+
+// SetUserServers replaces the server assignments for a user.
+func (s *Store) SetUserServers(userID int, serverIDs []int) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec(`DELETE FROM user_servers WHERE user_id = ?`, userID); err != nil {
+		return err
+	}
+	for _, sid := range serverIDs {
+		if _, err := tx.Exec(`INSERT INTO user_servers (user_id, server_id) VALUES (?, ?)`, userID, sid); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetServersForUser returns servers assigned to a user via user_servers join.
+func (s *Store) GetServersForUser(userID int) ([]Server, error) {
+	rows, err := s.db.Query(
+		`SELECT s.id, s.name, s.host, s.port, s.username, s.password, s."group", s.auth_type, s.private_key, s.sort_order
+		 FROM servers s
+		 INNER JOIN user_servers us ON us.server_id = s.id
+		 WHERE us.user_id = ?
+		 ORDER BY s.sort_order, s.id`, userID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var servers []Server
+	for rows.Next() {
+		var srv Server
+		if err := rows.Scan(&srv.ID, &srv.Name, &srv.Host, &srv.Port, &srv.Username, &srv.Password, &srv.Group, &srv.AuthType, &srv.PrivateKey, &srv.SortOrder); err != nil {
+			return nil, err
+		}
+		cmds, err := s.getQuickCommands(srv.ID)
+		if err != nil {
+			return nil, err
+		}
+		srv.QuickCommands = cmds
+		servers = append(servers, srv)
+	}
+	if servers == nil {
+		servers = []Server{}
+	}
+	return servers, rows.Err()
+}
+
+// UserHasServerAccess checks if a user has access to a specific server.
+func (s *Store) UserHasServerAccess(userID, serverID int) (bool, error) {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM user_servers WHERE user_id = ? AND server_id = ?`,
+		userID, serverID,
+	).Scan(&count)
+	return count > 0, err
 }

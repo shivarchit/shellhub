@@ -84,6 +84,8 @@ export interface AuditEntry {
   action: string
   server_id: number | null
   details: string
+  user_id?: number
+  username?: string
   created_at: string
 }
 

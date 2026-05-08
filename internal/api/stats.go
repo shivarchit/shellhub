@@ -62,6 +62,12 @@ func (h *Handler) getServerStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Access control
+	if !h.userCanAccessServer(r, id) {
+		writeError(w, 403, "access denied")
+		return
+	}
+
 	// Check cache first
 	if cached, ok := cache.get(id); ok {
 		writeJSON(w, 200, cached)

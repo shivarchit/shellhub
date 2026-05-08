@@ -1,10 +1,17 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
+interface UserInfo {
+  id: number
+  username: string
+  role: string
+}
+
 interface AuthState {
   authenticated: boolean
   setupRequired: boolean
   loading: boolean
+  user: UserInfo | null
 }
 
 interface AuthContextType extends AuthState {
@@ -21,7 +28,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authenticated: false,
     setupRequired: false,
     loading: true,
+    user: null,
   })
+
+  const fetchUser = async () => {
+    try {
+      const res = await fetch('/api/auth/me', { credentials: 'include' })
+      if (res.ok) {
+        const user = await res.json()
+        setState((s) => ({ ...s, user }))
+      }
+    } catch {
+      // ignore - user info is supplementary
+    }
+  }
 
   const checkAuth = useCallback(async () => {
     try {
@@ -32,12 +52,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           authenticated: data.authenticated,
           setupRequired: data.setup_required,
           loading: false,
+          user: null,
         })
+        if (data.authenticated) {
+          await fetchUser()
+        }
       } else {
-        setState({ authenticated: false, setupRequired: false, loading: false })
+        setState({ authenticated: false, setupRequired: false, loading: false, user: null })
       }
     } catch {
-      setState({ authenticated: false, setupRequired: false, loading: false })
+      setState({ authenticated: false, setupRequired: false, loading: false, user: null })
     }
   }, [])
 
@@ -57,6 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(body.error || `HTTP ${res.status}`)
     }
     setState((s) => ({ ...s, authenticated: true, setupRequired: false }))
+    await fetchUser()
   }
 
   const register = async (username: string, password: string) => {
@@ -71,11 +96,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(body.error || `HTTP ${res.status}`)
     }
     setState((s) => ({ ...s, authenticated: true, setupRequired: false }))
+    await fetchUser()
   }
 
   const logout = async () => {
     await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
-    setState((s) => ({ ...s, authenticated: false }))
+    setState((s) => ({ ...s, authenticated: false, user: null }))
   }
 
   return (
