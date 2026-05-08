@@ -11,7 +11,9 @@
       "Bash(go *)",
       "Bash(cd *)",
       "Bash(git merge *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(go-winres simply *)",
+      "Bash(/c/Users/sarchitt/go/bin/go-winres simply *)"
     ]
   }
 }
