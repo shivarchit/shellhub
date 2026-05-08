@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording, ServerStats, MetricsResponse } from './types'
 
 const BASE = '/api'
 
@@ -121,3 +121,10 @@ export const getRecording = (id: number) =>
 
 export const deleteRecording = (id: number) =>
   request<void>(`/recordings/${id}`, { method: 'DELETE' })
+
+// Server Stats & Metrics
+export const getServerStats = (id: number) =>
+  request<ServerStats>(`/servers/${id}/stats`)
+
+export const getMetrics = (range: string = '7d') =>
+  request<MetricsResponse>(`/metrics?range=${range}`)
