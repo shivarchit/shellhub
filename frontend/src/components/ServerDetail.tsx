@@ -177,7 +177,7 @@ export default function ServerDetail({
                     'w-1.5 h-1.5 rounded-full',
                     rec.exit_code === 0 ? 'bg-accent-green' : 'bg-accent-red'
                   )} />
-                  <span className="text-text-primary font-medium truncate max-w-[200px]">{rec.command_name}</span>
+                  <span className="text-text-primary font-medium truncate max-w-[700px]">{rec.command_name}</span>
                 </div>
                 <div className="flex items-center gap-3 text-text-muted">
                   <span className={rec.exit_code === 0 ? 'text-accent-green' : 'text-accent-red'}>
