@@ -144,7 +144,7 @@ export const changePassword = (oldPassword: string, newPassword: string) =>
   request<void>('/auth/password', { method: 'PUT', body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }) })
 
 export const getUsers = () =>
-  request<Array<{ id: number; username: string; role: string; created_at: string; last_login: string }>>('/users')
+  request<Array<{ id: number; username: string; role: string; permissions: UserPermissionsPayload; created_at: string; last_login: string }>>('/users')
 
 export const createNewUser = (username: string, password: string, role: string) =>
   request<{ id: number; username: string; role: string }>('/users', { method: 'POST', body: JSON.stringify({ username, password, role }) })
