@@ -80,6 +80,8 @@ func (h *Handler) getServerStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.decryptServerCredentials(srv)
+
 	// Run a combined command to gather stats in one SSH session (timeout 5s)
 	cmd := `echo "===CPU===" && top -bn1 | head -5 && echo "===MEM===" && free -m && echo "===DISK===" && df -h / && echo "===UPTIME===" && uptime`
 
