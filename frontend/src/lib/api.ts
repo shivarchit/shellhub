@@ -160,3 +160,16 @@ export const getUserServers = (id: number) =>
 
 export const updateUserServers = (id: number, serverIds: number[]) =>
   request<void>(`/users/${id}/servers`, { method: 'PUT', body: JSON.stringify({ server_ids: serverIds }) })
+
+export interface UserPermissionsPayload {
+  can_view_recordings: boolean
+  can_view_metrics: boolean
+  can_view_audit: boolean
+  can_manage_servers: boolean
+  can_exec_commands: boolean
+  can_open_terminal: boolean
+  can_view_db: boolean
+}
+
+export const updateUserPermissions = (id: number, perms: UserPermissionsPayload) =>
+  request<UserPermissionsPayload>(`/users/${id}/permissions`, { method: 'PUT', body: JSON.stringify(perms) })

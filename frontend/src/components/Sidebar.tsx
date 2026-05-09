@@ -282,7 +282,7 @@ export default function Sidebar({
 
       {/* Footer */}
       <div className="px-3 py-3 border-t border-border space-y-2">
-        {user?.role === 'superadmin' && (
+        {user?.permissions?.can_view_recordings && (
           <button
             onClick={() => navigate('/recordings')}
             className="w-full py-2 text-sm text-text-muted flex items-center justify-center gap-2 border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
@@ -294,7 +294,7 @@ export default function Sidebar({
             Recordings
           </button>
         )}
-        {user?.role === 'superadmin' && (
+        {user?.permissions?.can_view_metrics && (
           <button
             onClick={() => navigate('/metrics')}
             className="w-full py-2 text-sm text-text-secondary border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors flex items-center justify-center gap-2"
@@ -305,13 +305,15 @@ export default function Sidebar({
             Metrics
           </button>
         )}
-        <button
-          onClick={onAdd}
-          className="w-full py-2 text-sm text-text-secondary border border-dashed border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
-        >
-          + Add Server
-        </button>
-        {user?.role === 'superadmin' && (
+        {user?.permissions?.can_manage_servers && (
+          <button
+            onClick={onAdd}
+            className="w-full py-2 text-sm text-text-secondary border border-dashed border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors"
+          >
+            + Add Server
+          </button>
+        )}
+        {user?.permissions?.can_view_audit && (
           <button
             onClick={() => navigate('/audit')}
             className="w-full py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"

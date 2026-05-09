@@ -27,9 +27,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function SuperAdminRoute({ children }: { children: React.ReactNode }) {
+function RequirePermission({ permission, children }: { permission: keyof import('./lib/auth').UserPermissions; children: React.ReactNode }) {
   const { user } = useAuth()
-  if (user?.role !== 'superadmin') {
+  if (!user?.permissions?.[permission]) {
     return <Navigate to="/" replace />
   }
   return <>{children}</>
@@ -42,9 +42,9 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/terminal/:id" element={<ProtectedRoute><Terminal /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-      <Route path="/audit" element={<ProtectedRoute><SuperAdminRoute><Audit /></SuperAdminRoute></ProtectedRoute>} />
-      <Route path="/recordings" element={<ProtectedRoute><SuperAdminRoute><Recordings /></SuperAdminRoute></ProtectedRoute>} />
-      <Route path="/metrics" element={<ProtectedRoute><SuperAdminRoute><Metrics /></SuperAdminRoute></ProtectedRoute>} />
+      <Route path="/audit" element={<ProtectedRoute><RequirePermission permission="can_view_audit"><Audit /></RequirePermission></ProtectedRoute>} />
+      <Route path="/recordings" element={<ProtectedRoute><RequirePermission permission="can_view_recordings"><Recordings /></RequirePermission></ProtectedRoute>} />
+      <Route path="/metrics" element={<ProtectedRoute><RequirePermission permission="can_view_metrics"><Metrics /></RequirePermission></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

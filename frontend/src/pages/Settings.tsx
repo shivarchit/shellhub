@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable, getUsers, createNewUser, deleteUser, updateUserRole, getUserServers, updateUserServers, changePassword, getServers } from '../lib/api'
+import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable, getUsers, createNewUser, deleteUser, updateUserRole, getUserServers, updateUserServers, changePassword, getServers, updateUserPermissions } from '../lib/api'
+import type { UserPermissionsPayload } from '../lib/api'
 import type { AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, Server } from '../lib/types'
 import { useAuth } from '../lib/auth'
 
@@ -60,6 +61,17 @@ export default function Settings() {
   const [allServers, setAllServers] = useState<Server[]>([])
   const [userServerIds, setUserServerIds] = useState<number[]>([])
   const [savingServers, setSavingServers] = useState(false)
+  const [editingPermsFor, setEditingPermsFor] = useState<UserRecord | null>(null)
+  const [editPerms, setEditPerms] = useState<UserPermissionsPayload>({
+    can_view_recordings: false,
+    can_view_metrics: false,
+    can_view_audit: false,
+    can_manage_servers: false,
+    can_exec_commands: true,
+    can_open_terminal: true,
+    can_view_db: false,
+  })
+  const [savingPerms, setSavingPerms] = useState(false)
 
   const actionColors: Record<string, string> = {
     server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
@@ -253,6 +265,33 @@ export default function Settings() {
       fetchUsers()
     } catch (e) {
       console.error(e)
+    }
+  }
+
+  const handleEditPerms = async (u: UserRecord) => {
+    setEditingPermsFor(u)
+    try {
+      const allUsers = await getUsers()
+      const target = allUsers.find((usr: any) => usr.id === u.id)
+      if (target?.permissions) {
+        setEditPerms(target.permissions)
+      }
+    } catch {
+      // use defaults
+    }
+  }
+
+  const handleSavePerms = async () => {
+    if (!editingPermsFor) return
+    setSavingPerms(true)
+    try {
+      await updateUserPermissions(editingPermsFor.id, editPerms)
+      setEditingPermsFor(null)
+      fetchUsers()
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setSavingPerms(false)
     }
   }
 
@@ -1001,6 +1040,14 @@ export default function Settings() {
                                 >
                                   Servers
                                 </button>
+                                {u.role !== 'superadmin' && (
+                                  <button
+                                    onClick={() => handleEditPerms(u)}
+                                    className="px-2 py-1 text-xs text-accent-blue hover:opacity-80 transition-opacity"
+                                  >
+                                    Permissions
+                                  </button>
+                                )}
                                 {u.id !== user?.id && (
                                   <button
                                     onClick={() => handleDeleteUser(u.id)}
@@ -1061,6 +1108,59 @@ export default function Settings() {
                       className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
                     >
                       {savingServers ? 'Saving...' : 'Save Server Access'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Permissions Modal */}
+              {editingPermsFor && (
+                <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
+                      Permissions for {editingPermsFor.username}
+                    </h2>
+                    <button
+                      onClick={() => setEditingPermsFor(null)}
+                      className="px-3 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <p className="text-xs text-text-muted mb-3">
+                    Toggle what this user can access. Superadmins always have full access.
+                  </p>
+                  <div className="space-y-2">
+                    {([
+                      { key: 'can_open_terminal', label: 'Open Terminal', desc: 'Connect to servers via terminal' },
+                      { key: 'can_exec_commands', label: 'Execute Commands', desc: 'Run quick commands on servers' },
+                      { key: 'can_manage_servers', label: 'Manage Servers', desc: 'Add, edit, delete servers' },
+                      { key: 'can_view_recordings', label: 'View Recordings', desc: 'Access session recordings' },
+                      { key: 'can_view_metrics', label: 'View Metrics', desc: 'Access metrics dashboard' },
+                      { key: 'can_view_audit', label: 'View Audit Trail', desc: 'Access audit log' },
+                      { key: 'can_view_db', label: 'View Database', desc: 'Access database browser' },
+                    ] as const).map(({ key, label, desc }) => (
+                      <label key={key} className="flex items-center justify-between px-3 py-2.5 bg-surface-700 rounded-lg cursor-pointer hover:bg-surface-600 transition-colors">
+                        <div>
+                          <span className="text-sm text-text-primary">{label}</span>
+                          <p className="text-xs text-text-muted">{desc}</p>
+                        </div>
+                        <input
+                          type="checkbox"
+                          checked={editPerms[key]}
+                          onChange={(e) => setEditPerms((p) => ({ ...p, [key]: e.target.checked }))}
+                          className="accent-accent-blue w-4 h-4"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <div className="mt-4">
+                    <button
+                      onClick={handleSavePerms}
+                      disabled={savingPerms}
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                    >
+                      {savingPerms ? 'Saving...' : 'Save Permissions'}
                     </button>
                   </div>
                 </div>

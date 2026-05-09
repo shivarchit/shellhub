@@ -41,6 +41,7 @@ func (h *AuthHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/users/{id}/role", h.updateUserRole)
 	mux.HandleFunc("GET /api/users/{id}/servers", h.getUserServers)
 	mux.HandleFunc("PUT /api/users/{id}/servers", h.setUserServers)
+	mux.HandleFunc("PUT /api/users/{id}/permissions", h.updateUserPermissions)
 }
 
 // status returns whether setup is needed and whether the user is authenticated.
@@ -441,4 +442,29 @@ func (h *AuthHandler) setUserServers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]string{"status": "servers updated"})
+}
+
+func (h *AuthHandler) updateUserPermissions(w http.ResponseWriter, r *http.Request) {
+	if !isSuperAdmin(r) {
+		writeError(w, 403, "superadmin access required")
+		return
+	}
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		writeError(w, 400, "invalid user id")
+		return
+	}
+
+	var perms auth.UserPermissions
+	if err := json.NewDecoder(r.Body).Decode(&perms); err != nil {
+		writeError(w, 400, "invalid request body")
+		return
+	}
+
+	if err := h.authStore.UpdateUserPermissions(id, perms); err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, perms)
 }

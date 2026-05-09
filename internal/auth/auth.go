@@ -28,13 +28,48 @@ var (
 // JWT-like token (HMAC-SHA256 signed)
 // We use a simple custom token format to avoid external dependencies.
 
+type UserPermissions struct {
+	CanViewRecordings bool `json:"can_view_recordings"`
+	CanViewMetrics    bool `json:"can_view_metrics"`
+	CanViewAudit      bool `json:"can_view_audit"`
+	CanManageServers  bool `json:"can_manage_servers"`
+	CanExecCommands   bool `json:"can_exec_commands"`
+	CanOpenTerminal   bool `json:"can_open_terminal"`
+	CanViewDB         bool `json:"can_view_db"`
+}
+
+func DefaultUserPermissions() UserPermissions {
+	return UserPermissions{
+		CanViewRecordings: false,
+		CanViewMetrics:    false,
+		CanViewAudit:      false,
+		CanManageServers:  false,
+		CanExecCommands:   true,
+		CanOpenTerminal:   true,
+		CanViewDB:         false,
+	}
+}
+
+func SuperAdminPermissions() UserPermissions {
+	return UserPermissions{
+		CanViewRecordings: true,
+		CanViewMetrics:    true,
+		CanViewAudit:      true,
+		CanManageServers:  true,
+		CanExecCommands:   true,
+		CanOpenTerminal:   true,
+		CanViewDB:         true,
+	}
+}
+
 type User struct {
-	ID           int    `json:"id"`
-	Username     string `json:"username"`
-	PasswordHash string `json:"-"`
-	Role         string `json:"role"`
-	CreatedAt    string `json:"created_at"`
-	LastLogin    string `json:"last_login"`
+	ID           int             `json:"id"`
+	Username     string          `json:"username"`
+	PasswordHash string          `json:"-"`
+	Role         string          `json:"role"`
+	Permissions  UserPermissions `json:"permissions"`
+	CreatedAt    string          `json:"created_at"`
+	LastLogin    string          `json:"last_login"`
 }
 
 type LoginAttempt struct {
@@ -83,8 +118,9 @@ func NewAuthStore(db *sql.DB) (*AuthStore, error) {
 		return nil, fmt.Errorf("create login_attempts table: %w", err)
 	}
 
-	// Add role column (harmlessly errors if already exists)
+	// Add columns (harmlessly errors if already exists)
 	s.db.Exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`)
+	s.db.Exec(`ALTER TABLE users ADD COLUMN permissions TEXT NOT NULL DEFAULT '{}'`)
 
 	// Generate or load JWT secret from app_settings
 	secret, err := s.getOrCreateSetting("jwt_secret", func() string {
@@ -158,28 +194,10 @@ func (s *AuthStore) EnsureDefaultAdmin() error {
 
 // CreateUser creates a new user with bcrypt-hashed password (role defaults to 'user').
 func (s *AuthStore) CreateUser(username, password string) (*User, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, err
-	}
-
-	res, err := s.db.Exec(
-		`INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'user')`,
-		username, string(hash),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	id, _ := res.LastInsertId()
-	return &User{
-		ID:       int(id),
-		Username: username,
-		Role:     "user",
-	}, nil
+	return s.CreateUserWithRole(username, password, "user")
 }
 
-// CreateUserWithRole creates a new user with the specified role.
+// CreateUserWithRole creates a new user with the specified role and default permissions.
 func (s *AuthStore) CreateUserWithRole(username, password, role string) (*User, error) {
 	if role == "" {
 		role = "user"
@@ -189,9 +207,15 @@ func (s *AuthStore) CreateUserWithRole(username, password, role string) (*User, 
 		return nil, err
 	}
 
+	perms := DefaultUserPermissions()
+	if role == "superadmin" {
+		perms = SuperAdminPermissions()
+	}
+	permsJSON, _ := json.Marshal(perms)
+
 	res, err := s.db.Exec(
-		`INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)`,
-		username, string(hash), role,
+		`INSERT INTO users (username, password_hash, role, permissions) VALUES (?, ?, ?, ?)`,
+		username, string(hash), role, string(permsJSON),
 	)
 	if err != nil {
 		return nil, err
@@ -199,19 +223,28 @@ func (s *AuthStore) CreateUserWithRole(username, password, role string) (*User, 
 
 	id, _ := res.LastInsertId()
 	return &User{
-		ID:       int(id),
-		Username: username,
-		Role:     role,
+		ID:          int(id),
+		Username:    username,
+		Role:        role,
+		Permissions: perms,
 	}, nil
+}
+
+// UpdateUserPermissions updates the permissions JSON for a user.
+func (s *AuthStore) UpdateUserPermissions(userID int, perms UserPermissions) error {
+	permsJSON, _ := json.Marshal(perms)
+	_, err := s.db.Exec(`UPDATE users SET permissions = ? WHERE id = ?`, string(permsJSON), userID)
+	return err
 }
 
 // Authenticate validates username/password. Returns user on success.
 func (s *AuthStore) Authenticate(username, password string) (*User, error) {
 	var user User
+	var permsJSON string
 	err := s.db.QueryRow(
-		`SELECT id, username, password_hash, COALESCE(role, 'user'), created_at, COALESCE(last_login, '') FROM users WHERE username = ?`,
+		`SELECT id, username, password_hash, COALESCE(role, 'user'), COALESCE(permissions, '{}'), created_at, COALESCE(last_login, '') FROM users WHERE username = ?`,
 		username,
-	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &user.CreatedAt, &user.LastLogin)
+	).Scan(&user.ID, &user.Username, &user.PasswordHash, &user.Role, &permsJSON, &user.CreatedAt, &user.LastLogin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
@@ -221,6 +254,14 @@ func (s *AuthStore) Authenticate(username, password string) (*User, error) {
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return nil, ErrInvalidPassword
+	}
+
+	// Parse permissions
+	if user.Role == "superadmin" {
+		user.Permissions = SuperAdminPermissions()
+	} else {
+		user.Permissions = DefaultUserPermissions()
+		json.Unmarshal([]byte(permsJSON), &user.Permissions)
 	}
 
 	// Update last_login
@@ -400,7 +441,7 @@ func (s *AuthStore) ChangePassword(userID int, oldPassword, newPassword string) 
 // GetUsers returns all users.
 func (s *AuthStore) GetUsers() ([]User, error) {
 	rows, err := s.db.Query(
-		`SELECT id, username, COALESCE(role, 'user'), created_at, COALESCE(last_login, '') FROM users ORDER BY id`,
+		`SELECT id, username, COALESCE(role, 'user'), COALESCE(permissions, '{}'), created_at, COALESCE(last_login, '') FROM users ORDER BY id`,
 	)
 	if err != nil {
 		return nil, err
@@ -410,8 +451,15 @@ func (s *AuthStore) GetUsers() ([]User, error) {
 	var users []User
 	for rows.Next() {
 		var u User
-		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt, &u.LastLogin); err != nil {
+		var permsJSON string
+		if err := rows.Scan(&u.ID, &u.Username, &u.Role, &permsJSON, &u.CreatedAt, &u.LastLogin); err != nil {
 			return nil, err
+		}
+		if u.Role == "superadmin" {
+			u.Permissions = SuperAdminPermissions()
+		} else {
+			u.Permissions = DefaultUserPermissions()
+			json.Unmarshal([]byte(permsJSON), &u.Permissions)
 		}
 		users = append(users, u)
 	}
@@ -424,14 +472,21 @@ func (s *AuthStore) GetUsers() ([]User, error) {
 // GetUser returns a single user by ID.
 func (s *AuthStore) GetUser(id int) (*User, error) {
 	var u User
+	var permsJSON string
 	err := s.db.QueryRow(
-		`SELECT id, username, COALESCE(role, 'user'), created_at, COALESCE(last_login, '') FROM users WHERE id = ?`, id,
-	).Scan(&u.ID, &u.Username, &u.Role, &u.CreatedAt, &u.LastLogin)
+		`SELECT id, username, COALESCE(role, 'user'), COALESCE(permissions, '{}'), created_at, COALESCE(last_login, '') FROM users WHERE id = ?`, id,
+	).Scan(&u.ID, &u.Username, &u.Role, &permsJSON, &u.CreatedAt, &u.LastLogin)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrUserNotFound
 		}
 		return nil, err
+	}
+	if u.Role == "superadmin" {
+		u.Permissions = SuperAdminPermissions()
+	} else {
+		u.Permissions = DefaultUserPermissions()
+		json.Unmarshal([]byte(permsJSON), &u.Permissions)
 	}
 	return &u, nil
 }

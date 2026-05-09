@@ -1,10 +1,21 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 
+export interface UserPermissions {
+  can_view_recordings: boolean
+  can_view_metrics: boolean
+  can_view_audit: boolean
+  can_manage_servers: boolean
+  can_exec_commands: boolean
+  can_open_terminal: boolean
+  can_view_db: boolean
+}
+
 interface UserInfo {
   id: number
   username: string
   role: string
+  permissions: UserPermissions
 }
 
 interface AuthState {
