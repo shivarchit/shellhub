@@ -22,8 +22,17 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Session Tokens** — HMAC-SHA256 tokens in httpOnly cookies (24h expiry)
 - **Encrypted Credentials** — server passwords and SSH keys encrypted at rest with AES-256-GCM
 - **Rate Limiting** — accounts locked after 5 failed login attempts in 10 minutes (auto-unlock after 30 min)
-- **Default Admin** — auto-creates a superadmin account on first launch, with option to create additional users
+- **Superadmin** — first user auto-promoted to superadmin with full access
 - **Login Audit** — all login attempts (success/failure) logged with IP and user agent
+- **Copy on Select** — terminal auto-copies selected text, Ctrl+C copies when text selected (SIGINT otherwise)
+
+### User Management & Permissions
+- **Role-Based Access** — superadmin and user roles with granular permission control
+- **Per-User Permissions** — toggle access to: terminal, commands, server management, recordings, metrics, audit, database browser
+- **Server Assignment** — assign specific servers to each user (superadmin sees all)
+- **User CRUD** — create, delete users, change roles from Settings > Users tab
+- **Change Password** — all users can change their own password from Settings > Security
+- **Audit Trail with User** — all actions and commands tracked with who performed them
 
 ### Terminal Power
 - **Multi-Tab Terminals** — open multiple terminal sessions simultaneously (Ctrl+T to open, Ctrl+W to close, Ctrl+1-9 to switch)
@@ -36,19 +45,24 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Global Commands** — define commands shared across all servers, managed in Settings
 - **Command Templates** — use `{{variable}}` or `{{variable:default}}` syntax for parameterized commands
 - **Built-in Variables** — auto-resolve `{{hostname}}`, `{{username}}`, `{{port}}`, `{{date}}`, `{{server_name}}`
-- **Full Audit Trail** — dedicated `/audit` page with filtering, search, pagination, and CSV export
+- **Full Audit Trail** — dedicated `/audit` page with Commands and Actions tabs, filtering, search, pagination, CSV export
+- **User Attribution** — every audit entry shows which user performed the action
 - **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
 
 ### Monitoring & Metrics
-- **Server Stats Widgets** — live CPU, memory, disk usage, uptime, and load average per server
+- **Server Stats Widgets** — CPU, memory, disk usage, uptime, and load average per server (fetched on select)
 - **Metrics Dashboard** — historical charts for uptime %, connections, command execution rates, and latency
 - **Time Range Selector** — view metrics for last 24h, 7d, or 30d
+- **Background Ping** — configurable interval records uptime and latency to ping_history
 - **CSS/SVG Charts** — lightweight visualization with no external charting libraries
-- **Auto-Refresh** — stats refresh every 60 seconds, configurable ping interval for status checks
+
+### Admin Tools
+- **Database Browser** — browse all SQLite tables and data from Settings > Database tab (superadmin only)
+- **User Management** — create users, assign roles, set permissions, assign servers (superadmin only)
+- **Export / Import** — backup and restore your server configs as JSON
 
 ### Organization
 - **Drag & Drop** — reorder servers within groups by dragging
-- **Export / Import** — backup and restore your server configs as JSON
 - **Toast Notifications** — real-time feedback when commands complete
 - **Keyboard Shortcuts** — `Ctrl+K` to focus server search
 
@@ -114,6 +128,50 @@ cd frontend && npm run dev
 
 Open `http://localhost:5173` for the frontend with hot reload.
 
+## User Roles & Permissions
+
+| Permission | Superadmin | Default User |
+|------------|:----------:|:------------:|
+| Open Terminal | Yes | Yes |
+| Execute Commands | Yes | Yes |
+| Manage Servers | Yes | No |
+| View Recordings | Yes | No |
+| View Metrics | Yes | No |
+| View Audit Trail | Yes | No |
+| View Database | Yes | No |
+| Manage Users | Yes | No |
+
+Superadmin can toggle any permission per user from Settings > Users > Permissions.
+
+Regular users only see servers assigned to them by the superadmin.
+
+## Settings
+
+Access settings via the gear icon in the sidebar or navigate to `/settings`.
+
+**General:**
+- Ping Interval — how often to check server online/offline status (default: 30 minutes)
+- Export/Import — backup and restore server configs as JSON
+
+**Commands:**
+- Global Commands — create, edit, delete commands shared across all servers
+- Template Support — mark commands as templates with variable placeholders
+
+**Security:**
+- Change Password — update your own password
+- Login Attempts — view all login attempts with success/failure status
+- Security Info — overview of encryption and auth measures in place
+
+**Database** (superadmin only):
+- Browse all SQLite tables
+- View rows with pagination
+
+**Users** (superadmin only):
+- Create/delete users
+- Change roles (superadmin/user)
+- Set granular permissions per user
+- Assign server access per user
+
 ## Storage
 
 On first launch, ShellHub asks you to pick a folder for the database. The choice is saved to `settings.json` in your OS config directory (`%APPDATA%\ShellHub` on Windows, `~/.config/shellhub` on Linux/macOS) and remembered on restart.
@@ -151,72 +209,88 @@ See `servers.example.yaml` for a full example with multiple servers.
 
 > **Note:** `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
 
-## Settings
-
-Access settings via the gear icon in the sidebar or navigate to `/settings`.
-
-**General:**
-- **Ping Interval** — how often to check server online/offline status (default: 30 minutes)
-- **Export** — download all servers and settings as a JSON file
-- **Import** — upload a JSON backup to merge or replace existing data
-- **Audit Log** — view recent actions with link to full audit trail
-
-**Commands:**
-- **Global Commands** — create, edit, delete commands shared across all servers
-- **Template Support** — mark commands as templates with variable placeholders
-
-**Security & Audit:**
-- **Login Attempts** — view all login attempts with success/failure status
-- **Security Info** — overview of encryption and auth measures in place
-- **Logout** — end current session
-
 ## API Endpoints
 
+### Authentication
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/servers` | List all servers |
+| GET | `/api/auth/status` | Auth status check |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/register` | Register (first user only) |
+| POST | `/api/auth/logout` | Logout |
+| GET | `/api/auth/me` | Get current user info + permissions |
+| PUT | `/api/auth/password` | Change own password |
+
+### User Management (superadmin)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/users` | List all users |
+| POST | `/api/users` | Create user |
+| DELETE | `/api/users/{id}` | Delete user |
+| PUT | `/api/users/{id}/role` | Update user role |
+| GET | `/api/users/{id}/servers` | Get assigned servers |
+| PUT | `/api/users/{id}/servers` | Set assigned servers |
+| PUT | `/api/users/{id}/permissions` | Update user permissions |
+
+### Servers
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/servers` | List servers (filtered by access) |
 | POST | `/api/servers` | Create server |
 | PUT | `/api/servers/{id}` | Update server |
 | DELETE | `/api/servers/{id}` | Delete server |
 | PUT | `/api/servers/reorder` | Reorder servers |
 | POST | `/api/servers/{id}/ping` | Check server online status |
 | POST | `/api/servers/{id}/exec` | Execute command on server |
-| GET | `/api/servers/{id}/stats` | Get live server stats (CPU/mem/disk) |
+| GET | `/api/servers/{id}/stats` | Get live server stats |
 | GET | `/api/servers/{id}/history` | Connection history |
-| GET | `/api/servers/{id}/exec-history` | Execution history for server |
+| GET | `/api/servers/{id}/exec-history` | Execution history |
+
+### Commands & Audit
+| Method | Path | Description |
+|--------|------|-------------|
 | GET | `/api/global-commands` | List global commands |
 | POST | `/api/global-commands` | Create global command |
 | PUT | `/api/global-commands/{id}` | Update global command |
 | DELETE | `/api/global-commands/{id}` | Delete global command |
-| GET | `/api/exec-history` | Full exec history (paginated, filterable) |
+| GET | `/api/exec-history` | Full exec history (paginated) |
 | GET | `/api/exec-history/export` | Export exec history as CSV |
+| GET | `/api/audit-log` | Audit log entries |
+
+### Recordings & Metrics
+| Method | Path | Description |
+|--------|------|-------------|
 | GET | `/api/recordings` | List session recordings |
 | GET | `/api/recordings/{id}` | Get recording with data |
 | DELETE | `/api/recordings/{id}` | Delete recording |
 | GET | `/api/metrics` | Metrics dashboard data |
-| GET | `/api/audit-log` | Audit log entries |
+
+### Admin
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/db/tables` | List database tables |
+| GET | `/api/db/query` | Query table data |
 | GET | `/api/settings` | Get app settings |
 | PUT | `/api/settings` | Update settings |
 | GET | `/api/export` | Export all data as JSON |
 | POST | `/api/import` | Import data from JSON |
-| POST | `/api/auth/register` | Register first user |
-| POST | `/api/auth/login` | Login |
-| POST | `/api/auth/logout` | Logout |
-| GET | `/api/auth/status` | Auth status check |
-| WS | `/api/terminal/{id}` | WebSocket terminal session |
+
+### WebSocket
+| Method | Path | Description |
+|--------|------|-------------|
+| WS | `/api/terminal/{id}` | Interactive terminal session |
 
 ## Cross-Platform Builds
 
-ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box. Windows builds include `-H windowsgui` to hide the console window.
+ShellHub uses pure-Go SQLite (no CGO), so cross-compilation works out of the box. Windows builds include `-H windowsgui` to hide the console window and embed the application icon.
 
-All build scripts live in the `build/` directory. Run them from there:
+All build scripts live in the `build/` directory:
 
 **PowerShell (Windows):**
 
 ```powershell
 cd build
 ./build.ps1 build-all       # all 5 platforms
-
 ./build.ps1 windows         # build/dist/shellhub-windows-amd64.exe
 ./build.ps1 linux           # build/dist/shellhub-linux-amd64
 ./build.ps1 linux-arm       # build/dist/shellhub-linux-arm64
@@ -229,7 +303,6 @@ cd build
 ```bash
 cd build
 make build-all              # all 5 platforms
-
 make build-windows          # build/dist/shellhub-windows-amd64.exe
 make build-linux            # build/dist/shellhub-linux-amd64
 make build-linux-arm        # build/dist/shellhub-linux-arm64
@@ -237,7 +310,7 @@ make build-mac              # build/dist/shellhub-darwin-amd64
 make build-mac-arm          # build/dist/shellhub-darwin-arm64
 ```
 
-Cross-platform binaries land in `build/dist/`. Each is a self-contained single file — copy it to the target machine and run.
+Cross-platform binaries land in `build/dist/`. Each is a self-contained single file.
 
 ## CLI Flags
 
@@ -249,7 +322,7 @@ Cross-platform binaries land in `build/dist/`. Each is a self-contained single f
 
 ## Tech Stack
 
-**Backend:** Go, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray, sqweek/dialog
+**Backend:** Go 1.25, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray, sqweek/dialog
 
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, @xterm/addon-search, React Router, @dnd-kit
 
@@ -257,23 +330,25 @@ Cross-platform binaries land in `build/dist/`. Each is a self-contained single f
 
 ```
 shellhub/
-├── main.go                 # Entry point, routing, embedded frontend
+├── main.go                 # Entry point, routing, background ping, embedded frontend
 ├── servers.example.yaml    # Example config for YAML import
+├── assets/
+│   └── shellhub.ico        # Application icon source
 ├── build/
 │   ├── build.ps1           # PowerShell build script (Windows)
 │   ├── Makefile            # Make build script (Linux/macOS)
 │   └── dist/               # Cross-platform binaries (gitignored)
 ├── internal/
-│   ├── auth/               # Authentication (bcrypt, JWT, AES-256-GCM encryption)
-│   ├── config/             # SQLite store (servers, settings, history, audit, metrics)
+│   ├── auth/               # Authentication, RBAC, encryption, permissions
+│   ├── config/             # SQLite store, schema, migrations, CRUD
 │   ├── settings/           # Persisted app settings (DB path)
 │   ├── ssh/                # SSH client (password + key auth)
-│   ├── api/                # REST API handlers + stats/metrics endpoints
-│   ├── terminal/           # WebSocket ↔ SSH bridge with recording support
+│   ├── api/                # REST handlers, stats, metrics, DB browser
+│   ├── terminal/           # WebSocket ↔ SSH bridge with recording
 │   └── tray/               # System tray icon + menu
 └── frontend/
     └── src/
         ├── pages/          # Dashboard, Terminal, Settings, Login, Audit, Recordings, Metrics
-        ├── components/     # Sidebar, CommandCard, TabBar, TerminalSearch, ServerStatsWidget, etc.
-        └── lib/            # API client, types, WebSocket helpers, auth context, templates
+        ├── components/     # Sidebar, TabBar, TerminalSearch, ServerStatsWidget, etc.
+        └── lib/            # API client, types, auth context, templates, WebSocket
 ```
