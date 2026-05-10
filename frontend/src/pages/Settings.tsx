@@ -383,7 +383,7 @@ export default function Settings() {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6 pt-0">
-        <div className="max-w-xl mx-auto">
+        <div className="max-w-5xl mx-auto">
           {activeTab === 'general' && (
             <>
               {/* General section */}
@@ -498,53 +498,6 @@ export default function Settings() {
                 </div>
               </div>
 
-              {/* Audit Log section */}
-              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
-                    Audit Log
-                  </h2>
-                  <button
-                    onClick={() => navigate('/audit')}
-                    className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
-                  >
-                    Full Audit Trail
-                  </button>
-                </div>
-                {auditEntries.length === 0 ? (
-                  <p className="text-sm text-text-muted">No audit entries yet.</p>
-                ) : (
-                  <div className="max-h-96 overflow-y-auto space-y-1.5">
-                    {auditEntries.map((entry) => (
-                      <div
-                        key={entry.id}
-                        className="flex items-center justify-between px-3 py-2 bg-surface-700 rounded-lg text-xs"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex px-2 py-0.5 rounded border text-[10px] font-semibold uppercase ${
-                              actionColors[entry.action] || 'bg-surface-600 text-text-muted border-border'
-                            }`}
-                          >
-                            {entry.action.replace(/_/g, ' ')}
-                          </span>
-                          {entry.details && (
-                            <span className="text-text-primary truncate max-w-[200px]">
-                              {entry.details}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-3 text-text-muted">
-                          {entry.server_id !== null && (
-                            <span>Server #{entry.server_id}</span>
-                          )}
-                          <span>{entry.created_at}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
             </>
           )}
 

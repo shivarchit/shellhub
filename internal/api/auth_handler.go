@@ -412,7 +412,7 @@ func (h *AuthHandler) getUserServers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
-	writeJSON(w, 200, map[string]any{"server_ids": ids})
+	writeJSON(w, 200, ids)
 }
 
 // setUserServers sets the server IDs assigned to a user.

@@ -258,26 +258,26 @@ export default function Metrics() {
   }, [range])
 
   const connectionData = useMemo(() => {
-    if (!metrics) return []
+    if (!metrics?.connections) return []
     return metrics.connections.map(c => ({ key: c.date, value: c.count }))
   }, [metrics])
 
   const execData = useMemo(() => {
-    if (!metrics) return []
+    if (!metrics?.executions) return []
     return metrics.executions.map(e => ({ key: e.date, success: e.success, failure: e.failure }))
   }, [metrics])
 
   const topServersData = useMemo(() => {
-    if (!metrics) return []
+    if (!metrics?.top_servers) return []
     return metrics.top_servers.map(s => ({ label: s.server_name, value: s.count }))
   }, [metrics])
 
   const latencySeries = useMemo(() => {
-    if (!metrics) return []
+    if (!metrics?.latencies) return []
     return Object.entries(metrics.latencies).map(([name, points], idx) => ({
       name,
       color: LINE_COLORS[idx % LINE_COLORS.length],
-      points: points.map((p, i) => ({ x: i, y: p.avg_ms })),
+      points: (points || []).map((p, i) => ({ x: i, y: p.avg_ms })),
     }))
   }, [metrics])
 
@@ -332,16 +332,16 @@ export default function Metrics() {
           <div className="max-w-6xl mx-auto space-y-6">
             {/* Summary Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <SummaryCard label="Total Servers" value={metrics.summary.total_servers} />
+              <SummaryCard label="Total Servers" value={metrics.summary?.total_servers ?? 0} />
               <SummaryCard
                 label="Online Now"
-                value={metrics.summary.online_servers}
-                sub={`of ${metrics.summary.total_servers}`}
+                value={metrics.summary?.online_servers ?? 0}
+                sub={`of ${metrics.summary?.total_servers ?? 0}`}
               />
-              <SummaryCard label="Commands Today" value={metrics.summary.total_execs_today} />
+              <SummaryCard label="Commands Today" value={metrics.summary?.total_execs_today ?? 0} />
               <SummaryCard
                 label="Avg Uptime"
-                value={`${metrics.summary.avg_uptime.toFixed(1)}%`}
+                value={`${(metrics.summary?.avg_uptime ?? 0).toFixed(1)}%`}
                 sub={`last ${range}`}
               />
             </div>
@@ -351,7 +351,7 @@ export default function Metrics() {
               {/* Uptime Per Server */}
               <div className="bg-surface-800 rounded-lg border border-border p-5">
                 <h3 className="text-sm font-semibold text-text-primary mb-4">Server Uptime</h3>
-                <UptimeChart data={metrics.uptimes.map(u => ({ server_name: u.server_name, uptime: u.uptime }))} />
+                <UptimeChart data={(metrics.uptimes || []).map(u => ({ server_name: u.server_name, uptime: u.uptime }))} />
               </div>
 
               {/* Connections Over Time */}
