@@ -222,10 +222,6 @@ func (h *AuthHandler) loginAttempts(w http.ResponseWriter, r *http.Request) {
 
 // --- Authenticated endpoints ---
 
-func authIsSuperAdmin(r *http.Request) bool {
-	return r.Header.Get("X-User-Role") == "superadmin"
-}
-
 // me returns the current authenticated user.
 func (h *AuthHandler) me(w http.ResponseWriter, r *http.Request) {
 	idStr := r.Header.Get("X-User-ID")
@@ -281,7 +277,7 @@ func (h *AuthHandler) changePassword(w http.ResponseWriter, r *http.Request) {
 
 // listUsers returns all users (superadmin only).
 func (h *AuthHandler) listUsers(w http.ResponseWriter, r *http.Request) {
-	if !authIsSuperAdmin(r) {
+	if !isSuperAdmin(r) {
 		writeError(w, 403, "superadmin access required")
 		return
 	}
@@ -295,7 +291,7 @@ func (h *AuthHandler) listUsers(w http.ResponseWriter, r *http.Request) {
 
 // createUser creates a new user (superadmin only).
 func (h *AuthHandler) createUser(w http.ResponseWriter, r *http.Request) {
-	if !authIsSuperAdmin(r) {
+	if !isSuperAdmin(r) {
 		writeError(w, 403, "superadmin access required")
 		return
 	}
@@ -330,7 +326,7 @@ func (h *AuthHandler) createUser(w http.ResponseWriter, r *http.Request) {
 
 // deleteUser deletes a user (superadmin only, cannot delete self).
 func (h *AuthHandler) deleteUser(w http.ResponseWriter, r *http.Request) {
-	if !authIsSuperAdmin(r) {
+	if !isSuperAdmin(r) {
 		writeError(w, 403, "superadmin access required")
 		return
 	}
@@ -360,7 +356,7 @@ func (h *AuthHandler) deleteUser(w http.ResponseWriter, r *http.Request) {
 
 // updateUserRole updates a user's role (superadmin only).
 func (h *AuthHandler) updateUserRole(w http.ResponseWriter, r *http.Request) {
-	if !authIsSuperAdmin(r) {
+	if !isSuperAdmin(r) {
 		writeError(w, 403, "superadmin access required")
 		return
 	}
@@ -394,7 +390,7 @@ func (h *AuthHandler) updateUserRole(w http.ResponseWriter, r *http.Request) {
 
 // getUserServers returns the server IDs assigned to a user.
 func (h *AuthHandler) getUserServers(w http.ResponseWriter, r *http.Request) {
-	if !authIsSuperAdmin(r) {
+	if !isSuperAdmin(r) {
 		writeError(w, 403, "superadmin access required")
 		return
 	}
@@ -417,7 +413,7 @@ func (h *AuthHandler) getUserServers(w http.ResponseWriter, r *http.Request) {
 
 // setUserServers sets the server IDs assigned to a user.
 func (h *AuthHandler) setUserServers(w http.ResponseWriter, r *http.Request) {
-	if !authIsSuperAdmin(r) {
+	if !isSuperAdmin(r) {
 		writeError(w, 403, "superadmin access required")
 		return
 	}

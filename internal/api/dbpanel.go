@@ -35,6 +35,16 @@ func (h *Handler) queryTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate table name against actual tables to prevent SQL injection
+	var exists int
+	err := h.store.DB().QueryRow(
+		`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name = ?`, table,
+	).Scan(&exists)
+	if err != nil || exists == 0 {
+		writeError(w, 400, "invalid table name")
+		return
+	}
+
 	limitStr := r.URL.Query().Get("limit")
 	limit := 100
 	if limitStr != "" {
@@ -51,7 +61,7 @@ func (h *Handler) queryTable(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Get total count
+	// Get total count (table name validated above, safe to interpolate)
 	var total int
 	countRow := h.store.DB().QueryRow(`SELECT COUNT(*) FROM "` + table + `"`)
 	if err := countRow.Scan(&total); err != nil {
