@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getSettings, updateSettings, exportData, importData, getAuditLog, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable, getUsers, createNewUser, deleteUser, updateUserRole, getUserServers, updateUserServers, changePassword, getServers, updateUserPermissions } from '../lib/api'
+import { getSettings, updateSettings, exportData, importData, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable, getUsers, createNewUser, deleteUser, updateUserRole, getUserServers, updateUserServers, changePassword, getServers, updateUserPermissions } from '../lib/api'
 import type { UserPermissionsPayload } from '../lib/api'
-import type { AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, Server } from '../lib/types'
+import type { LoginAttempt, GlobalCommand, GlobalCommandInput, Server } from '../lib/types'
 import { useAuth } from '../lib/auth'
 
 interface UserRecord {
@@ -23,7 +23,6 @@ export default function Settings() {
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState('')
-  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([])
   const tabs = ['general', 'commands', 'security', ...(user?.role === 'superadmin' ? ['database', 'users'] : [])] as const
   const [activeTab, setActiveTab] = useState<string>('general')
@@ -73,14 +72,6 @@ export default function Settings() {
   })
   const [savingPerms, setSavingPerms] = useState(false)
 
-  const actionColors: Record<string, string> = {
-    server_create: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
-    server_update: 'bg-surface-600 text-accent-blue border-border',
-    server_delete: 'bg-accent-red-bg text-accent-red border-accent-red-dim',
-    command_exec: 'bg-surface-600 text-text-primary border-border',
-    terminal_connect: 'bg-accent-green-bg text-accent-green border-accent-green-dim',
-    terminal_disconnect: 'bg-accent-red-bg text-accent-red border-accent-red-dim',
-  }
 
   const fetchGlobalCmds = () => {
     getGlobalCommands().then(setGlobalCmds).catch(() => setGlobalCmds([]))
@@ -97,9 +88,6 @@ export default function Settings() {
         if (s.ping_interval) setPingInterval(s.ping_interval)
       })
       .catch(() => {})
-    getAuditLog()
-      .then(setAuditEntries)
-      .catch(() => setAuditEntries([]))
     getLoginAttempts()
       .then(setLoginAttempts)
       .catch(() => setLoginAttempts([]))

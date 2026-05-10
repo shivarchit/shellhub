@@ -62,6 +62,8 @@ export interface ExecRecord {
   exit_code: number
   executed_at: string
   duration_ms: number
+  user_id?: number
+  username?: string
 }
 
 export interface ExecHistoryPage {
