@@ -520,7 +520,7 @@ func (s *AuthStore) UpdateUserRole(id int, role string) error {
 // --- Encryption for credentials ---
 
 // SetEncryptionKey derives a 32-byte key from the master password using SHA-256.
-// In production you'd use PBKDF2/argon2 with a salt, but we store a random salt.
+// Also persists the derived key so it survives server restarts.
 func (s *AuthStore) SetEncryptionKey(masterPassword string) error {
 	salt, err := s.getOrCreateSetting("encryption_salt", func() string {
 		b := make([]byte, 16)
@@ -533,9 +533,29 @@ func (s *AuthStore) SetEncryptionKey(masterPassword string) error {
 
 	saltBytes, _ := base64.StdEncoding.DecodeString(salt)
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.encryptionKey = deriveKey(masterPassword, saltBytes)
+	s.mu.Unlock()
+
+	// Persist derived key for restart recovery
+	encoded := base64.StdEncoding.EncodeToString(s.encryptionKey)
+	s.db.Exec(`INSERT INTO app_settings (key, value) VALUES ('encryption_key', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`, encoded)
 	return nil
+}
+
+// LoadEncryptionKey restores the encryption key from persisted storage (survives restarts).
+func (s *AuthStore) LoadEncryptionKey() {
+	var encoded string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'encryption_key'`).Scan(&encoded)
+	if err != nil || encoded == "" {
+		return
+	}
+	key, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(key) != 32 {
+		return
+	}
+	s.mu.Lock()
+	s.encryptionKey = key
+	s.mu.Unlock()
 }
 
 // HasEncryptionKey returns whether the encryption key is currently set.

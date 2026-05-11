@@ -66,6 +66,8 @@ func runServer(port int, dbPath string, dev bool) error {
 		return fmt.Errorf("failed to initialize auth: %w", err)
 	}
 
+	authStore.LoadEncryptionKey()
+
 	if err := authStore.EnsureDefaultAdmin(); err != nil {
 		log.Printf("Warning: could not seed default admin: %v", err)
 	}
