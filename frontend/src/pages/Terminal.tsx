@@ -324,6 +324,8 @@ export default function TerminalPage() {
                 serverId={tab.serverId}
                 tabId={tab.id}
                 active={tab.id === activeTabId}
+                serverName={tab.server?.name}
+                serverHost={tab.server ? `${tab.server.host}:${tab.server.port}` : undefined}
                 onConnected={handleConnected}
                 onDisconnected={handleDisconnected}
                 onRecordingStarted={handleRecordingStarted}

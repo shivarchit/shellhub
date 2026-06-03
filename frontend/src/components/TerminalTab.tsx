@@ -7,11 +7,14 @@ import '@xterm/xterm/css/xterm.css'
 
 import { createTerminalSocket, sendResize } from '../lib/ws'
 import TerminalSearch from './TerminalSearch'
+import ConnectAnimation from './ConnectAnimation'
 
 interface TerminalTabProps {
   serverId: number
   tabId: string
   active: boolean
+  serverName?: string
+  serverHost?: string
   onConnected: (tabId: string) => void
   onDisconnected: (tabId: string) => void
   onRecordingStarted: (tabId: string, recId: number) => void
@@ -25,6 +28,8 @@ export default function TerminalTab({
   serverId,
   tabId,
   active,
+  serverName,
+  serverHost,
   onConnected,
   onDisconnected,
   onRecordingStarted,
@@ -39,6 +44,7 @@ export default function TerminalTab({
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const [showSearch, setShowSearch] = useState(false)
   const [connected, setConnected] = useState(false)
+  const [showConnectAnim, setShowConnectAnim] = useState(true)
   const mountedRef = useRef(false)
 
   // Initialize terminal on mount
@@ -109,6 +115,7 @@ export default function TerminalTab({
 
     ws.onopen = () => {
       setConnected(true)
+      setShowConnectAnim(false)
       onConnected(tabId)
       sendResize(ws, term.cols, term.rows)
     }
@@ -253,6 +260,15 @@ export default function TerminalTab({
       style={{ display: active ? 'flex' : 'none' }}
       data-tab-id={tabId}
     >
+      {/* Connection animation overlay */}
+      {showConnectAnim && !connected && (
+        <ConnectAnimation
+          serverName={serverName || `Server #${serverId}`}
+          serverHost={serverHost || '...'}
+          onComplete={() => setShowConnectAnim(false)}
+        />
+      )}
+
       {/* Search overlay */}
       {showSearch && (
         <TerminalSearch

@@ -14,6 +14,7 @@ import Sidebar from '../components/Sidebar'
 import ServerDetail from '../components/ServerDetail'
 import AddEditServerModal from '../components/AddEditServerModal'
 import ExecModal from '../components/ExecModal'
+import ActivityFeed from '../components/ActivityFeed'
 
 interface ExecState {
   result: ExecResult
@@ -159,7 +160,7 @@ export default function Dashboard() {
     setExecResult(null)
     const start = performance.now()
     try {
-      const result = await execCommand(selectedId, command.command)
+      const result = await execCommand(selectedId, command.command, command.name)
       const elapsed = Math.round(performance.now() - start)
       setExecResult({ result, command, duration: elapsed })
     } catch {
@@ -193,8 +194,8 @@ export default function Dashboard() {
           onExecComplete={handleExecComplete}
         />
       ) : (
-        <div className="flex-1 flex items-center justify-center">
-          <div className="text-center">
+        <div className="flex-1 flex flex-col items-center justify-center px-6">
+          <div className="text-center mb-8">
             <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-700/20 border border-accent-blue/20">
               <span className="text-2xl font-mono text-accent-blue font-bold">
                 {'>'}_
@@ -207,6 +208,17 @@ export default function Dashboard() {
               Select a server from the sidebar to view details and run commands,
               or add a new one to get started.
             </p>
+          </div>
+          <div className="w-full max-w-lg">
+            <div className="flex items-center gap-2 mb-3 px-2">
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-text-muted">
+                <path d="M2 3h12M2 7h8M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+              <span className="text-xs font-mono text-text-muted uppercase tracking-wider">Recent Activity</span>
+            </div>
+            <div className="bg-surface-800 border border-border rounded-xl p-3 max-h-[400px] overflow-y-auto">
+              <ActivityFeed />
+            </div>
           </div>
         </div>
       )}

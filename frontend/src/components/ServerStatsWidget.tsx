@@ -1,6 +1,9 @@
-import { useEffect, useState, useCallback, memo } from 'react'
+import { useEffect, useState, useCallback, memo, useRef } from 'react'
 import type { ServerStats } from '../lib/types'
 import { getServerStats } from '../lib/api'
+
+const CACHE_TTL_MS = 5 * 60 * 1000
+const statsCache = new Map<number, { data: ServerStats; timestamp: number }>()
 
 interface ServerStatsWidgetProps {
   serverId: number
@@ -63,16 +66,27 @@ function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
   const [stats, setStats] = useState<ServerStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const fetchedRef = useRef(false)
 
-  const fetchStats = useCallback(async () => {
+  const fetchStats = useCallback(async (force = false) => {
     if (!online) {
       setStats(null)
       setError(null)
       setLoading(false)
       return
     }
+
+    const cached = statsCache.get(serverId)
+    if (!force && cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+      setStats(cached.data)
+      setError(cached.data.online ? null : (cached.data.error || 'Server unreachable'))
+      setLoading(false)
+      return
+    }
+
     try {
       const data = await getServerStats(serverId)
+      statsCache.set(serverId, { data, timestamp: Date.now() })
       setStats(data)
       setError(data.online ? null : (data.error || 'Server unreachable'))
     } catch {
@@ -84,6 +98,12 @@ function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
   }, [serverId, online])
 
   useEffect(() => {
+    fetchedRef.current = false
+  }, [serverId])
+
+  useEffect(() => {
+    if (fetchedRef.current) return
+    fetchedRef.current = true
     setLoading(true)
     fetchStats()
   }, [fetchStats])

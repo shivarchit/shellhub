@@ -41,7 +41,7 @@ export default function CommandPanel({
       setRunningIdx(idx)
       const start = performance.now()
       try {
-        const result: ExecResult = await execCommand(server.id, commandText)
+        const result: ExecResult = await execCommand(server.id, commandText, commandName)
         const elapsed = Math.round(performance.now() - start)
         setLastExec({
           output: result.output,

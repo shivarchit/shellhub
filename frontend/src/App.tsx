@@ -6,6 +6,8 @@ import Login from './pages/Login'
 import Audit from './pages/Audit'
 import Recordings from './pages/Recordings'
 import Metrics from './pages/Metrics'
+import Guide from './pages/Guide'
+import Status from './pages/Status'
 import ToastProvider from './components/ToastProvider'
 import { AuthProvider, useAuth } from './lib/auth'
 
@@ -45,6 +47,8 @@ function AppRoutes() {
       <Route path="/audit" element={<ProtectedRoute><RequirePermission permission="can_view_audit"><Audit /></RequirePermission></ProtectedRoute>} />
       <Route path="/recordings" element={<ProtectedRoute><RequirePermission permission="can_view_recordings"><Recordings /></RequirePermission></ProtectedRoute>} />
       <Route path="/metrics" element={<ProtectedRoute><RequirePermission permission="can_view_metrics"><Metrics /></RequirePermission></ProtectedRoute>} />
+      <Route path="/guide" element={<ProtectedRoute><Guide /></ProtectedRoute>} />
+      <Route path="/status" element={<ProtectedRoute><Status /></ProtectedRoute>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

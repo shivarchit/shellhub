@@ -7,10 +7,10 @@ type TimeRange = '24h' | '7d' | '30d'
 
 function SummaryCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
-    <div className="bg-surface-800 rounded-lg border border-border p-5">
-      <p className="text-xs text-text-muted mb-1 uppercase tracking-wider font-semibold">{label}</p>
-      <p className="text-2xl font-bold text-text-primary">{value}</p>
-      {sub && <p className="text-xs text-text-muted mt-1">{sub}</p>}
+    <div className="bg-surface-800 rounded-xl border border-border p-5 hover:border-border-medium transition-colors">
+      <p className="text-[11px] text-text-muted mb-2 uppercase tracking-wider font-semibold">{label}</p>
+      <p className="text-3xl font-bold text-text-primary tabular-nums">{value}</p>
+      {sub && <p className="text-xs text-text-muted mt-1.5">{sub}</p>}
     </div>
   )
 }
@@ -23,7 +23,7 @@ function BarChart({ data, maxVal, color }: { data: { key: string; value: number 
   }
   return (
     <div>
-      <div className="flex items-end gap-1 h-32">
+      <div className="flex items-end gap-[3px] h-40">
         {data.map((d) => {
           const height = maxVal > 0 ? (d.value / maxVal) * 100 : 0
           return (
@@ -39,11 +39,11 @@ function BarChart({ data, maxVal, color }: { data: { key: string; value: number 
           )
         })}
       </div>
-      <div className="flex gap-1 mt-1.5">
+      <div className="flex gap-[3px] mt-2">
         {data.map((d, i) => (
           <div key={d.key} className="flex-1 text-center">
             {(i === 0 || i === data.length - 1 || i === Math.floor(data.length / 2)) && (
-              <span className="text-[9px] text-text-dimmed">{formatDateLabel(d.key)}</span>
+              <span className="text-[10px] text-text-muted">{formatDateLabel(d.key)}</span>
             )}
           </div>
         ))}
@@ -61,7 +61,7 @@ function StackedBarChart({ data }: { data: { key: string; success: number; failu
   const maxVal = Math.max(...data.map(d => d.success + d.failure), 1)
   return (
     <div>
-      <div className="flex items-end gap-1 h-32">
+      <div className="flex items-end gap-[3px] h-40">
         {data.map((d) => {
           const successH = maxVal > 0 ? (d.success / maxVal) * 100 : 0
           const failureH = maxVal > 0 ? (d.failure / maxVal) * 100 : 0
@@ -86,16 +86,16 @@ function StackedBarChart({ data }: { data: { key: string; success: number; failu
           )
         })}
       </div>
-      <div className="flex gap-1 mt-1.5">
+      <div className="flex gap-[3px] mt-2">
         {data.map((d, i) => (
           <div key={d.key} className="flex-1 text-center">
             {(i === 0 || i === data.length - 1 || i === Math.floor(data.length / 2)) && (
-              <span className="text-[9px] text-text-dimmed">{formatDateLabel(d.key)}</span>
+              <span className="text-[10px] text-text-muted">{formatDateLabel(d.key)}</span>
             )}
           </div>
         ))}
       </div>
-      <div className="flex items-center gap-4 mt-2">
+      <div className="flex items-center gap-4 mt-3">
         <div className="flex items-center gap-1.5">
           <span className="w-2.5 h-2.5 rounded-sm bg-accent-green" />
           <span className="text-[10px] text-text-muted">Success</span>
@@ -134,15 +134,15 @@ function HorizontalBarChart({ data }: { data: { label: string; value: number }[]
   )
 }
 
-function SVGLineChart({ series, height = 120 }: { series: { name: string; points: { x: number; y: number }[]; color: string }[]; height?: number }) {
+function SVGLineChart({ series, height = 140 }: { series: { name: string; points: { x: number; y: number }[]; color: string }[]; height?: number }) {
   if (series.length === 0 || series.every(s => s.points.length === 0)) {
     return (
       <div className="text-center py-8 text-text-muted text-sm">No data for this period</div>
     )
   }
 
-  const width = 100 // percentage-based via viewBox
-  const padding = 4
+  const width = 400
+  const padding = 12
 
   const allYs = series.flatMap(s => s.points.map(p => p.y))
   const maxY = Math.max(...allYs, 1)
@@ -154,7 +154,7 @@ function SVGLineChart({ series, height = 120 }: { series: { name: string; points
   const scaleY = (y: number) => height - padding - (y / maxY) * (height - padding * 2)
 
   return (
-    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="none" style={{ height: `${height}px` }}>
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full" preserveAspectRatio="xMidYMid meet" style={{ height: `${height}px` }}>
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(frac => (
         <line
@@ -164,8 +164,9 @@ function SVGLineChart({ series, height = 120 }: { series: { name: string; points
           x2={width - padding}
           y2={scaleY(frac * maxY)}
           stroke="currentColor"
-          strokeWidth="0.2"
+          strokeWidth="0.5"
           className="text-surface-600"
+          strokeDasharray="4 4"
         />
       ))}
       {/* Lines */}
@@ -180,7 +181,7 @@ function SVGLineChart({ series, height = 120 }: { series: { name: string; points
             d={path}
             fill="none"
             stroke={s.color}
-            strokeWidth="0.8"
+            strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
@@ -193,7 +194,7 @@ function SVGLineChart({ series, height = 120 }: { series: { name: string; points
             key={`${s.name}-${i}`}
             cx={scaleX(p.x)}
             cy={scaleY(p.y)}
-            r="1"
+            r="3"
             fill={s.color}
           />
         ))
@@ -250,11 +251,19 @@ export default function Metrics() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    let cancelled = false
     setLoading(true)
     getMetrics(range)
-      .then(setMetrics)
-      .catch(() => setMetrics(null))
-      .finally(() => setLoading(false))
+      .then((data) => {
+        if (!cancelled) setMetrics(data)
+      })
+      .catch(() => {
+        if (!cancelled) setMetrics(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [range])
 
   const connectionData = useMemo(() => {
@@ -349,13 +358,13 @@ export default function Metrics() {
             {/* Charts Row 1 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Uptime Per Server */}
-              <div className="bg-surface-800 rounded-lg border border-border p-5">
+              <div className="bg-surface-800 rounded-xl border border-border p-5">
                 <h3 className="text-sm font-semibold text-text-primary mb-4">Server Uptime</h3>
                 <UptimeChart data={(metrics.uptimes || []).map(u => ({ server_name: u.server_name, uptime: u.uptime }))} />
               </div>
 
               {/* Connections Over Time */}
-              <div className="bg-surface-800 rounded-lg border border-border p-5">
+              <div className="bg-surface-800 rounded-xl border border-border p-5">
                 <h3 className="text-sm font-semibold text-text-primary mb-4">Connections Over Time</h3>
                 <BarChart data={connectionData} maxVal={connectionMax} color="bg-accent-blue" />
               </div>
@@ -364,20 +373,20 @@ export default function Metrics() {
             {/* Charts Row 2 */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Command Executions */}
-              <div className="bg-surface-800 rounded-lg border border-border p-5">
+              <div className="bg-surface-800 rounded-xl border border-border p-5">
                 <h3 className="text-sm font-semibold text-text-primary mb-4">Command Executions</h3>
                 <StackedBarChart data={execData} />
               </div>
 
               {/* Top Servers */}
-              <div className="bg-surface-800 rounded-lg border border-border p-5">
+              <div className="bg-surface-800 rounded-xl border border-border p-5">
                 <h3 className="text-sm font-semibold text-text-primary mb-4">Top Servers by Activity</h3>
                 <HorizontalBarChart data={topServersData} />
               </div>
             </div>
 
             {/* Charts Row 3 */}
-            <div className="bg-surface-800 rounded-lg border border-border p-5">
+            <div className="bg-surface-800 rounded-xl border border-border p-5">
               <h3 className="text-sm font-semibold text-text-primary mb-4">Average Latency Trend</h3>
               {latencySeries.length > 0 ? (
                 <>

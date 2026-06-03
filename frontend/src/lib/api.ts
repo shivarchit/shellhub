@@ -37,10 +37,10 @@ export const reorderServers = (orders: { id: number; sort_order: number }[]) =>
 export const pingServer = (id: number) =>
   request<PingResult>(`/servers/${id}/ping`, { method: 'POST' })
 
-export const execCommand = (id: number, command: string) =>
+export const execCommand = (id: number, command: string, commandName?: string) =>
   request<ExecResult>(`/servers/${id}/exec`, {
     method: 'POST',
-    body: JSON.stringify({ command }),
+    body: JSON.stringify({ command, command_name: commandName }),
   })
 
 export const pingHost = (host: string, port: number) =>

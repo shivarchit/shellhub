@@ -33,7 +33,7 @@ export default function CommandCard({
     setStatus('running')
     const start = performance.now()
     try {
-      const result = await execCommand(serverId, resolvedCommand)
+      const result = await execCommand(serverId, resolvedCommand, command.name)
       const elapsed = Math.round(performance.now() - start)
       setDuration(elapsed)
       if (result.exit_code === 0) {

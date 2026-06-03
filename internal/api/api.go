@@ -265,11 +265,16 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 	h.decryptServerCredentials(srv)
 
 	var body struct {
-		Command string `json:"command"`
+		Command     string `json:"command"`
+		CommandName string `json:"command_name"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, 400, err.Error())
 		return
+	}
+	cmdName := body.CommandName
+	if cmdName == "" {
+		cmdName = body.Command
 	}
 	userID, username := getUserFromRequest(r)
 	start := time.Now()
@@ -282,7 +287,7 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 	h.store.LogExec(config.ExecRecord{
 		ServerID:    id,
 		ServerName:  srv.Name,
-		CommandName: body.Command,
+		CommandName: cmdName,
 		CommandText: body.Command,
 		Output:      output,
 		ExitCode:    exitCode,

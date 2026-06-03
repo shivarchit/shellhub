@@ -46,8 +46,14 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Command Templates** — use `{{variable}}` or `{{variable:default}}` syntax for parameterized commands
 - **Built-in Variables** — auto-resolve `{{hostname}}`, `{{username}}`, `{{port}}`, `{{date}}`, `{{server_name}}`
 - **Full Audit Trail** — dedicated `/audit` page with Commands and Actions tabs, filtering, search, pagination, CSV export
-- **User Attribution** — every audit entry shows which user performed the action
+- **User Attribution** — every audit entry shows which user performed the action (including terminal connect/disconnect)
+- **Command Name Tracking** — audit trail distinguishes between command name (friendly label) and command text (actual shell command)
 - **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
+
+### Help & Documentation
+- **In-App Guide** — built-in `/guide` page with step-by-step instructions for every feature
+- **Section Icons** — visual section headers with numbered steps, tips, and keyboard shortcuts
+- **Keyboard Shortcut Reference** — quick reference for all terminal and navigation shortcuts
 
 ### Monitoring & Metrics
 - **Server Stats Widgets** — CPU, memory, disk usage, uptime, and load average per server (fetched on select)

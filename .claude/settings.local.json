@@ -13,7 +13,14 @@
       "Bash(git merge *)",
       "Bash(git commit *)",
       "Bash(go-winres simply *)",
-      "Bash(/c/Users/sarchitt/go/bin/go-winres simply *)"
+      "Bash(/c/Users/sarchitt/go/bin/go-winres simply *)",
+      "Bash(gh pr *)",
+      "Bash(npx tsc *)",
+      "Bash(npx vite *)",
+      "Bash(taskkill //F //IM esbuild.exe)",
+      "Bash(taskkill //F //IM node.exe)",
+      "Bash(gh auth *)",
+      "Bash(gh repo *)"
     ]
   }
 }

@@ -59,6 +59,9 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	userID, _ := strconv.Atoi(r.Header.Get("X-User-ID"))
+	username := r.Header.Get("X-Username")
+
 	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("websocket upgrade failed: %v", err)
@@ -100,12 +103,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	recordID, _ := h.store.LogConnect(id)
-	h.store.LogAudit("terminal_connect", &id, srv.Name)
+	h.store.LogAuditWithUser("terminal_connect", &id, srv.Name, userID, username)
 	defer func() {
 		if recordID > 0 {
 			h.store.LogDisconnect(recordID)
 		}
-		h.store.LogAudit("terminal_disconnect", &id, srv.Name)
+		h.store.LogAuditWithUser("terminal_disconnect", &id, srv.Name, userID, username)
 	}()
 
 	// Recording state

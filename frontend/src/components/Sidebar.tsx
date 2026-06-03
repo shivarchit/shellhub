@@ -305,6 +305,16 @@ export default function Sidebar({
             Metrics
           </button>
         )}
+        <button
+          onClick={() => navigate('/status')}
+          className="w-full py-2 text-sm text-text-muted flex items-center justify-center gap-2 border border-border rounded-lg hover:border-accent-green hover:text-accent-green transition-colors"
+        >
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M5 8h2l1-2 2 4 1-2h2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Status
+        </button>
         {user?.permissions?.can_manage_servers && (
           <button
             onClick={onAdd}
@@ -324,6 +334,17 @@ export default function Sidebar({
             Audit Trail
           </button>
         )}
+        <button
+          onClick={() => navigate('/guide')}
+          className="w-full py-1.5 text-xs text-text-muted hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M6 6.5a2 2 0 1 1 2 2v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <circle cx="8" cy="12" r="0.75" fill="currentColor"/>
+          </svg>
+          Guide
+        </button>
       </div>
     </aside>
   )
