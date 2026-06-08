@@ -519,9 +519,28 @@ func (s *AuthStore) UpdateUserRole(id int, role string) error {
 
 // --- Encryption for credentials ---
 
-// SetEncryptionKey derives a 32-byte key from the master password using SHA-256.
-// Also persists the derived key so it survives server restarts.
+// SetEncryptionKey ensures an encryption key is available.
+// If a key has already been persisted (from a previous setup), it is loaded
+// and the master password is ignored — the persisted key is the source of
+// truth so that subsequent logins (or password changes) never invalidate
+// previously-encrypted server credentials.
+// If no key is persisted yet (first-time setup), a new 32-byte key is
+// derived from the master password + a stored salt and persisted.
 func (s *AuthStore) SetEncryptionKey(masterPassword string) error {
+	// If an encryption key already exists in storage, use it as-is.
+	var existing string
+	err := s.db.QueryRow(`SELECT value FROM app_settings WHERE key = 'encryption_key'`).Scan(&existing)
+	if err == nil && existing != "" {
+		key, decErr := base64.StdEncoding.DecodeString(existing)
+		if decErr == nil && len(key) == 32 {
+			s.mu.Lock()
+			s.encryptionKey = key
+			s.mu.Unlock()
+			return nil
+		}
+		// Fall through to regenerate if the stored value is corrupt.
+	}
+
 	salt, err := s.getOrCreateSetting("encryption_salt", func() string {
 		b := make([]byte, 16)
 		rand.Read(b)
