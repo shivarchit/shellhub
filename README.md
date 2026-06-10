@@ -80,9 +80,13 @@ Just double-click `shellhub.exe` (or run `./shellhub` on Linux/macOS).
 
 On first launch:
 1. A folder picker dialog asks where to store your data
-2. Your browser opens automatically to the dashboard
-3. Login with the superadmin account created on first launch
-4. A tray icon appears — right-click it to open the browser or stop the server
+2. ShellHub binds to **http://localhost:8080** (auto-falls-back to 8081, 8082… if 8080 is busy)
+3. Your browser opens automatically to the dashboard
+4. **Sign in with the default superadmin account:**
+   - **Username:** `admin`
+   - **Password:** `admin123`
+   - ⚠️ Change this immediately from **Settings → Security**
+5. A tray icon appears — right-click for *Open in Browser* / *Stop Server*
 
 Add servers from the browser. Everything is stored in `shellhub.db` in the folder you chose.
 
@@ -91,8 +95,27 @@ your-chosen-folder/
 └── shellhub.db      ← auto-created, stores all server configs
 
 %APPDATA%/ShellHub/  (Windows) or ~/.config/shellhub/ (Linux/macOS)
-└── settings.json    ← remembers your chosen DB location
+└── settings.json    ← remembers your chosen DB location + port
 ```
+
+### Changing the port
+
+Pick any of the following — all of them persist for future launches:
+
+```bash
+# Option 1: pass -port once, it gets saved to settings.json
+shellhub.exe -port 9000
+
+# Option 2: edit settings.json directly
+# %APPDATA%/ShellHub/settings.json   (Windows)
+# ~/.config/shellhub/settings.json   (Linux/macOS)
+{
+  "db_path": "C:\\Users\\me\\ShellHub\\shellhub.db",
+  "port": 9000
+}
+```
+
+If the chosen port is in use, ShellHub automatically picks the next free port in `[port, port+20]` and saves it. The current URL is shown in the tray tooltip and as a (disabled) menu entry.
 
 ### Import from YAML (optional)
 
