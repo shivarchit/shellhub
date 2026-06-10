@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -14,7 +15,7 @@ import (
 const DefaultPort = 8080
 
 // PortFallbackSpan is how many sequential ports above the requested one
-// ResolvePort will probe before giving up.
+// ResolvePort will probe before giving up when falling back automatically.
 const PortFallbackSpan = 20
 
 type Settings struct {
@@ -91,53 +92,63 @@ func Save(s *Settings) error {
 
 // ResolvePort decides which port to bind on:
 //  1. If portFlag > 0, treat it as an explicit override (e.g. user passed -port).
-//     The value is used and persisted, even if it equals DefaultPort.
-//  2. Else use the port saved in settings.json (if any).
-//  3. Else fall back to DefaultPort.
+//     The value MUST be free — if it's busy, an error is returned. No fallback.
+//     This is intentional: when a user explicitly asks for a port, they want
+//     that port (or a clear failure), not a silent move to another one.
+//  2. Else use the port saved in settings.json (if any). If busy, fall back to
+//     the next free port in [port, port+PortFallbackSpan] and persist it.
+//  3. Else use DefaultPort. If busy, fall back the same way.
 //
 // Pass 0 (or any non-positive value) when no explicit override is provided.
-//
-// If the chosen port is busy, the next free port in [port, port+PortFallbackSpan]
-// is picked and persisted. The final bound port is returned.
-func ResolvePort(portFlag int) int {
+// The final bound port is returned.
+func ResolvePort(portFlag int) (int, error) {
 	saved, _ := Load()
 
-	chosen := DefaultPort
-	persist := false
+	// Explicit override: bind exactly, no fallback, persist on success.
+	if portFlag > 0 {
+		if !isPortFree(portFlag) {
+			return 0, fmt.Errorf("port %d is already in use", portFlag)
+		}
+		if saved == nil {
+			saved = &Settings{}
+		}
+		if saved.Port != portFlag {
+			saved.Port = portFlag
+			_ = Save(saved)
+		}
+		return portFlag, nil
+	}
 
-	switch {
-	case portFlag > 0:
-		chosen = portFlag
-		persist = true
-	case saved != nil && saved.Port > 0:
+	// Implicit: prefer saved port, else DefaultPort. Both are allowed to fall back.
+	chosen := DefaultPort
+	if saved != nil && saved.Port > 0 {
 		chosen = saved.Port
 	}
 
 	final := firstFreePort(chosen, PortFallbackSpan)
+	if final == 0 {
+		return 0, fmt.Errorf("no free port in [%d, %d]", chosen, chosen+PortFallbackSpan)
+	}
 	if final != chosen {
 		log.Printf("Port %d is busy, using %d instead", chosen, final)
-		persist = true
-	}
-
-	if persist {
 		if saved == nil {
 			saved = &Settings{}
 		}
 		saved.Port = final
 		_ = Save(saved)
 	}
-	return final
+	return final, nil
 }
 
 // firstFreePort returns the first port in [start, start+span] that can be bound,
-// falling back to `start` if none in that range are free.
+// or 0 if none in that range are free.
 func firstFreePort(start, span int) int {
 	for p := start; p <= start+span; p++ {
 		if isPortFree(p) {
 			return p
 		}
 	}
-	return start
+	return 0
 }
 
 func isPortFree(port int) bool {
