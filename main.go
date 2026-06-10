@@ -176,8 +176,12 @@ func main() {
 
 	if *dev {
 		// Same port-resolution rules as the tray build: explicit flag >
-		// saved setting > default, with auto-fallback if the port is busy.
-		boundPort := settings.ResolvePort(portOverride)
+		// saved setting > default, with auto-fallback only when no explicit
+		// -port was given. An explicit busy port is a hard error.
+		boundPort, err := settings.ResolvePort(portOverride)
+		if err != nil {
+			log.Fatalf("Cannot start server: %v", err)
+		}
 
 		fmt.Println()
 		fmt.Println("  ShellHub is running! (dev mode)")
