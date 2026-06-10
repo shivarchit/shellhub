@@ -40,7 +40,7 @@ jobs:
             ext: ""
             ldflags: "-s -w"
           - name: darwin-amd64
-            runner: macos-13
+            runner: macos-latest
             goos: darwin
             goarch: amd64
             ext: ""
@@ -92,6 +92,16 @@ jobs:
           CGO_ENABLED: "1"
         run: |
           mkdir -p dist
+          # macOS cross-compile: target the right arch explicitly so CGO links correctly.
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            if [ "${{ matrix.goarch }}" = "amd64" ]; then
+              export CGO_CFLAGS="-target x86_64-apple-macos11 -mmacosx-version-min=11.0"
+              export CGO_LDFLAGS="-target x86_64-apple-macos11 -mmacosx-version-min=11.0"
+            else
+              export CGO_CFLAGS="-target arm64-apple-macos11 -mmacosx-version-min=11.0"
+              export CGO_LDFLAGS="-target arm64-apple-macos11 -mmacosx-version-min=11.0"
+            fi
+          fi
           OUT="dist/shellhub-${{ matrix.name }}${{ matrix.ext }}"
           go build -trimpath -ldflags "${{ matrix.ldflags }}" -o "$OUT" .
           ls -la dist
