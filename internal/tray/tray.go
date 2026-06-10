@@ -42,7 +42,16 @@ func Run(portFlag int, dbFlag string, startServer ServerFunc, openBrowser OpenBr
 		systray.SetIcon(GenerateIcon())
 		systray.SetTitle("ShellHub")
 
-		port := settings.ResolvePort(portFlag)
+		port, err := settings.ResolvePort(portFlag)
+		if err != nil {
+			// Explicit -port that was already in use. Surface visibly since
+			// the tray build has no console.
+			log.Printf("Cannot start server: %v", err)
+			dialog.Message("ShellHub cannot start:\n\n%v\n\nChoose a different port or stop the process using it.", err).
+				Title("ShellHub — Port Unavailable").Error()
+			systray.Quit()
+			return
+		}
 		url := fmt.Sprintf("http://localhost:%d", port)
 		systray.SetTooltip("ShellHub — " + url)
 
