@@ -9,6 +9,7 @@ import (
 
 type Settings struct {
 	DBPath string `json:"db_path"`
+	Port   int    `json:"port,omitempty"`
 }
 
 func configDir() (string, error) {
