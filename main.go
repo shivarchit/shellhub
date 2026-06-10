@@ -18,6 +18,7 @@ import (
 	"github.com/sarchitt/shellhub/internal/api"
 	"github.com/sarchitt/shellhub/internal/auth"
 	"github.com/sarchitt/shellhub/internal/config"
+	"github.com/sarchitt/shellhub/internal/settings"
 	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
 	"github.com/sarchitt/shellhub/internal/terminal"
 	"github.com/sarchitt/shellhub/internal/tray"
@@ -159,26 +160,39 @@ func openBrowser(url string) {
 }
 
 func main() {
-	port := flag.Int("port", 8080, "server port")
+	port := flag.Int("port", settings.DefaultPort, "server port")
 	dbFlag := flag.String("db", "shellhub.db", "database file path")
 	dev := flag.Bool("dev", false, "development mode (console, no tray)")
 	flag.Parse()
 
+	// Detect whether -port was explicitly passed (flag.Visit only visits set flags).
+	// 0 = no override; any positive value (including DefaultPort) = explicit.
+	portOverride := 0
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "port" {
+			portOverride = *port
+		}
+	})
+
 	if *dev {
+		// Same port-resolution rules as the tray build: explicit flag >
+		// saved setting > default, with auto-fallback if the port is busy.
+		boundPort := settings.ResolvePort(portOverride)
+
 		fmt.Println()
 		fmt.Println("  ShellHub is running! (dev mode)")
 		fmt.Println()
-		fmt.Printf("  Open in browser:  http://localhost:%d\n", *port)
+		fmt.Printf("  Open in browser:  http://localhost:%d\n", boundPort)
 		fmt.Printf("  Database:         %s\n", *dbFlag)
 		fmt.Println()
 		fmt.Println("  Press Ctrl+C to stop.")
 		fmt.Println()
 
-		if err := runServer(*port, *dbFlag, true); err != nil {
+		if err := runServer(boundPort, *dbFlag, true); err != nil {
 			log.Fatal(err)
 		}
 	} else {
 		// Production: tray handles DB path resolution (saved settings or folder picker)
-		tray.Run(*port, *dbFlag, runServer, openBrowser)
+		tray.Run(portOverride, *dbFlag, runServer, openBrowser)
 	}
 }
