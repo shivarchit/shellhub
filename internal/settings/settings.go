@@ -151,8 +151,13 @@ func firstFreePort(start, span int) int {
 	return 0
 }
 
+// isPortFree probes whether the given TCP port can be bound on all interfaces.
+// We probe the SAME address the real HTTP server will bind to (":port", i.e.
+// the wildcard address). Probing "127.0.0.1:port" instead would miss conflicts
+// with processes already bound to "0.0.0.0:port" or "[::]:port" — on Windows
+// in particular the loopback bind can succeed even when the wildcard is taken.
 func isPortFree(port int) bool {
-	ln, err := net.Listen("tcp", "127.0.0.1:"+strconv.Itoa(port))
+	ln, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
 		return false
 	}
