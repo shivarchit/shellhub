@@ -79,6 +79,11 @@ jobs:
             libx11-dev \
             rpm
 
+      - name: Install NSIS (Windows installer builder)
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: choco install nsis --yes --no-progress
+
       - name: Build frontend
         working-directory: frontend
         run: |
@@ -112,13 +117,16 @@ jobs:
             build/build-dmg.sh "$OUT" "${{ matrix.goarch }}"
             mv build/dist/*.dmg dist/
           elif [ "${{ matrix.goos }}" = "windows" ]; then
-            # NSIS installer expects the binary to be in build/dist/
+            # Add NSIS to PATH (choco installs it here on Windows runners)
+            export PATH="$PATH:/c/Program Files (x86)/NSIS"
+            # Copy binary into build/dist/ where shellhub.nsi expects it
             mkdir -p build/dist
             cp "$OUT" build/dist/shellhub-windows-amd64.exe
             cd build
             makensis shellhub.nsi
             cd ..
-            mv build/dist/*.exe dist/
+            # setup.exe is already written to build/dist/ by NSIS; copy to dist/
+            cp build/dist/shellhub-windows-amd64-setup.exe dist/
           elif [ "${{ matrix.goos }}" = "linux" ]; then
             chmod +x build/build-deb.sh
             chmod +x build/build-rpm.sh
