@@ -83,6 +83,9 @@ cp shellhub.icns "$APP_DIR/Contents/Resources/shellhub.icns"
 # Create symlink to Applications
 ln -s -f /Applications "dist/dmg_root/Applications"
 
+# Strip Gatekeeper quarantine so macOS doesn't block the app on launch
+xattr -dr com.apple.quarantine "dist/dmg_root/ShellHub.app" 2>/dev/null || true
+
 # Create DMG
 hdiutil create -volname "ShellHub" -srcfolder dist/dmg_root -ov -format UDZO "dist/shellhub-darwin-$ARCH.dmg"
 
