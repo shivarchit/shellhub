@@ -9,6 +9,11 @@ fi
 BINARY_PATH=$1
 ARCH=$2
 
+# Resolve BINARY_PATH to an absolute path
+if [[ "$BINARY_PATH" != /* ]]; then
+    BINARY_PATH="$(pwd)/$BINARY_PATH"
+fi
+
 echo "Packaging DMG for macOS $ARCH using binary $BINARY_PATH..."
 
 # Ensure we are in build directory

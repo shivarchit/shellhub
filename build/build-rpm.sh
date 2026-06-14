@@ -9,6 +9,11 @@ fi
 BINARY_PATH=$1
 ARCH=$2
 
+# Resolve BINARY_PATH to an absolute path
+if [[ "$BINARY_PATH" != /* ]]; then
+    BINARY_PATH="$(pwd)/$BINARY_PATH"
+fi
+
 # Translate arch to RPM standard (amd64 -> x86_64, arm64 -> aarch64)
 RPM_ARCH=$ARCH
 if [ "$ARCH" = "amd64" ]; then
