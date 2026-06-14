@@ -69,14 +69,15 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install Linux GUI deps (systray + dialog)
+      - name: Install Linux GUI deps (systray + dialog + RPM)
         if: matrix.goos == 'linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             libgtk-3-dev \
             libayatana-appindicator3-dev \
-            libx11-dev
+            libx11-dev \
+            rpm
 
       - name: Build frontend
         working-directory: frontend
@@ -84,7 +85,7 @@ jobs:
           npm ci
           npm run build
 
-      - name: Build binary
+      - name: Build binary and package installers
         shell: bash
         env:
           GOOS: ${{ matrix.goos }}
@@ -104,6 +105,29 @@ jobs:
           fi
           OUT="dist/shellhub-${{ matrix.name }}${{ matrix.ext }}"
           go build -trimpath -ldflags "${{ matrix.ldflags }}" -o "$OUT" .
+          
+          # Run native packaging scripts based on target OS
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            chmod +x build/build-dmg.sh
+            build/build-dmg.sh "$OUT" "${{ matrix.goarch }}"
+            mv build/dist/*.dmg dist/
+          elif [ "${{ matrix.goos }}" = "windows" ]; then
+            # NSIS installer expects the binary to be in build/dist/
+            mkdir -p build/dist
+            cp "$OUT" build/dist/shellhub-windows-amd64.exe
+            cd build
+            makensis shellhub.nsi
+            cd ..
+            mv build/dist/*.exe dist/
+          elif [ "${{ matrix.goos }}" = "linux" ]; then
+            chmod +x build/build-deb.sh
+            chmod +x build/build-rpm.sh
+            build/build-deb.sh "$OUT" "${{ matrix.goarch }}"
+            build/build-rpm.sh "$OUT" "${{ matrix.goarch }}"
+            mv build/dist/*.deb dist/
+            mv build/dist/*.rpm dist/
+          fi
+          
           ls -la dist
 
       - name: Compute SHA256

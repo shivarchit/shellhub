@@ -1,0 +1,3 @@
+Run in two terminals:
+  1: cd .. && go run . -dev
+  2: cd ../frontend && npm run dev

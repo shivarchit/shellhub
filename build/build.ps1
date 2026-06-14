@@ -51,26 +51,46 @@ switch ($Target) {
         Build-Frontend
         New-Item -ItemType Directory -Force -Path dist | Out-Null
         Build-Binary "windows" "amd64" "dist/shellhub-windows-amd64.exe"
+        if (Get-Command makensis -ErrorAction SilentlyContinue) {
+            Write-Host "Packaging Windows Setup Installer..." -ForegroundColor Cyan
+            makensis shellhub.nsi
+        } else {
+            Write-Host "Warning: makensis not found. Skipping Windows Setup packaging." -ForegroundColor Yellow
+        }
     }
     "linux" {
         Build-Frontend
         New-Item -ItemType Directory -Force -Path dist | Out-Null
         Build-Binary "linux" "amd64" "dist/shellhub-linux-amd64"
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            bash ./build-deb.sh dist/shellhub-linux-amd64 amd64
+            bash ./build-rpm.sh dist/shellhub-linux-amd64 amd64
+        }
     }
     "linux-arm" {
         Build-Frontend
         New-Item -ItemType Directory -Force -Path dist | Out-Null
         Build-Binary "linux" "arm64" "dist/shellhub-linux-arm64"
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            bash ./build-deb.sh dist/shellhub-linux-arm64 arm64
+            bash ./build-rpm.sh dist/shellhub-linux-arm64 arm64
+        }
     }
     "mac" {
         Build-Frontend
         New-Item -ItemType Directory -Force -Path dist | Out-Null
         Build-Binary "darwin" "amd64" "dist/shellhub-darwin-amd64"
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            bash ./build-dmg.sh dist/shellhub-darwin-amd64 amd64
+        }
     }
     "mac-arm" {
         Build-Frontend
         New-Item -ItemType Directory -Force -Path dist | Out-Null
         Build-Binary "darwin" "arm64" "dist/shellhub-darwin-arm64"
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            bash ./build-dmg.sh dist/shellhub-darwin-arm64 arm64
+        }
     }
     "build-all" {
         Build-Frontend
@@ -80,6 +100,20 @@ switch ($Target) {
         Build-Binary "linux"   "arm64" "dist/shellhub-linux-arm64"
         Build-Binary "darwin"  "amd64" "dist/shellhub-darwin-amd64"
         Build-Binary "darwin"  "arm64" "dist/shellhub-darwin-arm64"
+        
+        # Packaging
+        if (Get-Command makensis -ErrorAction SilentlyContinue) {
+            Write-Host "Packaging Windows Setup Installer..." -ForegroundColor Cyan
+            makensis shellhub.nsi
+        }
+        if (Get-Command bash -ErrorAction SilentlyContinue) {
+            bash ./build-deb.sh dist/shellhub-linux-amd64 amd64
+            bash ./build-rpm.sh dist/shellhub-linux-amd64 amd64
+            bash ./build-deb.sh dist/shellhub-linux-arm64 arm64
+            bash ./build-rpm.sh dist/shellhub-linux-arm64 arm64
+            bash ./build-dmg.sh dist/shellhub-darwin-amd64 amd64
+            bash ./build-dmg.sh dist/shellhub-darwin-arm64 arm64
+        }
         Write-Host "`nAll builds complete. Check build/dist/" -ForegroundColor Green
     }
     "clean" {
