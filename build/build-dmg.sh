@@ -8,6 +8,9 @@ fi
 
 BINARY_PATH=$1
 ARCH=$2
+VERSION=${VERSION:-0.1.2}
+BUNDLE_VERSION=${VERSION#v}
+CODESIGN_IDENTITY=${CODESIGN_IDENTITY:-}
 
 # Resolve BINARY_PATH to an absolute path
 if [[ "$BINARY_PATH" != /* ]]; then
@@ -68,11 +71,13 @@ cat <<EOF > "$APP_DIR/Contents/Info.plist"
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.2</string>
+    <string>$BUNDLE_VERSION</string>
+    <key>CFBundleVersion</key>
+    <string>$BUNDLE_VERSION</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
     <key>LSUIElement</key>
-    <string>true</string>
+    <true/>
 </dict>
 </plist>
 EOF
@@ -80,14 +85,41 @@ EOF
 # Copy icns into App Bundle
 cp shellhub.icns "$APP_DIR/Contents/Resources/shellhub.icns"
 
+# Sign the app bundle. A Developer ID signature is required for notarized
+# downloads; the ad-hoc fallback keeps local/test bundles structurally signed.
+if [ -n "$CODESIGN_IDENTITY" ]; then
+    echo "Signing ShellHub.app with Developer ID identity..."
+    codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+else
+    echo "CODESIGN_IDENTITY is not set; applying ad-hoc signature only."
+    codesign --force --deep --sign - "$APP_DIR"
+fi
+codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+
 # Create symlink to Applications
 ln -s -f /Applications "dist/dmg_root/Applications"
 
-# Strip Gatekeeper quarantine so macOS doesn't block the app on launch
-xattr -dr com.apple.quarantine "dist/dmg_root/ShellHub.app" 2>/dev/null || true
-
 # Create DMG
 hdiutil create -volname "ShellHub" -srcfolder dist/dmg_root -ov -format UDZO "dist/shellhub-darwin-$ARCH.dmg"
+
+if [ -n "$CODESIGN_IDENTITY" ]; then
+    echo "Signing ShellHub DMG..."
+    codesign --force --timestamp --sign "$CODESIGN_IDENTITY" "dist/shellhub-darwin-$ARCH.dmg"
+fi
+
+# Notarize and staple the DMG when Apple credentials are available in CI.
+if [ -n "$CODESIGN_IDENTITY" ] && [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
+    echo "Notarizing ShellHub DMG..."
+    xcrun notarytool submit "dist/shellhub-darwin-$ARCH.dmg" \
+        --apple-id "$APPLE_ID" \
+        --password "$APPLE_APP_PASSWORD" \
+        --team-id "$APPLE_TEAM_ID" \
+        --wait
+    xcrun stapler staple "dist/shellhub-darwin-$ARCH.dmg"
+    xcrun stapler validate "dist/shellhub-darwin-$ARCH.dmg"
+else
+    echo "Skipping notarization; Apple notarization credentials are not fully configured."
+fi
 
 # Clean up
 rm -rf dist/dmg_root
