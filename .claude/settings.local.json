@@ -20,7 +20,22 @@
       "Bash(taskkill //F //IM esbuild.exe)",
       "Bash(taskkill //F //IM node.exe)",
       "Bash(gh auth *)",
-      "Bash(gh repo *)"
+      "Bash(gh repo *)",
+      "Bash(git -C /Volumes/codeBox/shellhub diff --stat)",
+      "Bash(git -C /Volumes/codeBox/shellhub diff)",
+      "Bash(git *)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(gofmt *)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(echo \"---TSC DONE \\(exit $?\\)---\")",
+      "Bash(echo \"GO_EXIT=$?\")",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(echo \"BUILD_EXIT=$?\")",
+      "Bash(echo \"RUN_EXIT=$?\")",
+      "Bash(echo \"TSC_EXIT=$?\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k, json.dumps\\(v.get\\('fixAvailable'\\), indent=1\\)\\) for k,v in d.get\\('vulnerabilities',{}\\).items\\(\\)]\")",
+      "Bash(node *)",
+      "Bash(xargs sed -i '' \"s/from 'react-router-dom'/from 'react-router'/g\")"
     ]
   }
 }
