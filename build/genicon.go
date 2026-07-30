@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/png"
 	"log"
+	"math"
 	"os"
 )
 
@@ -29,53 +30,81 @@ func main() {
 	log.Printf("Successfully generated %dx%d icon at %s", *size, *size, *outPath)
 }
 
+// "F — Stack & Prompt": dark rounded badge, two server-rack slabs with status
+// LEDs and vent bars, and a green->blue prompt chevron with a dark outline.
+// All geometry is expressed on the 32-unit grid and scaled by s = size/32.
 func generateImage(size int) *image.RGBA {
 	img := image.NewRGBA(image.Rect(0, 0, size, size))
+	s := float64(size) / 32.0
 
-	blue1 := color.RGBA{R: 59, G: 130, B: 246, A: 255}
-	blue2 := color.RGBA{R: 99, G: 102, B: 241, A: 255}
-	white := color.RGBA{R: 255, G: 255, B: 255, A: 255}
-	transparent := color.RGBA{R: 0, G: 0, B: 0, A: 0}
+	badge := color.RGBA{0x0b, 0x11, 0x20, 255}
+	border := color.RGBA{0x25, 0x33, 0x45, 255}
+	slabFill := color.RGBA{0x1a, 0x23, 0x32, 255}
+	slabStroke := color.RGBA{0x2b, 0x3b, 0x55, 255}
+	ledGreen := color.RGBA{0x22, 0xc5, 0x5e, 255}
+	ledAmber := color.RGBA{0xf5, 0x9e, 0x0b, 255}
+	vent := color.RGBA{0x3d, 0x4c, 0x63, 255}
+	green := color.RGBA{0x22, 0xc5, 0x5e, 255}
+	blue := color.RGBA{0x3b, 0x82, 0xf6, 255}
+	transparent := color.RGBA{0, 0, 0, 0}
 
-	radius := float64(size) / 5.0
-
+	// Badge: rounded rect fill with a 1-unit inset border.
 	for y := 0; y < size; y++ {
 		for x := 0; x < size; x++ {
-			if !inRoundedRect(x, y, size, size, radius) {
+			gx, gy := (float64(x)+0.5)/s, (float64(y)+0.5)/s
+			switch {
+			case inRR(gx, gy, 0.5, 0.5, 31, 31, 6.5) && !inRR(gx, gy, 1.5, 1.5, 29, 29, 5.5):
+				img.Set(x, y, border)
+			case inRR(gx, gy, 0, 0, 32, 32, 7):
+				img.Set(x, y, badge)
+			default:
 				img.Set(x, y, transparent)
-				continue
 			}
-			t := (float64(x) + float64(y)) / float64(2*size)
-			r := lerp(float64(blue1.R), float64(blue2.R), t)
-			g := lerp(float64(blue1.G), float64(blue2.G), t)
-			b := lerp(float64(blue1.B), float64(blue2.B), t)
-			img.Set(x, y, color.RGBA{R: uint8(r), G: uint8(g), B: uint8(b), A: 255})
 		}
 	}
 
-	// Calculate line thickness proportional to size (using 64 size with 3px thick as base)
-	thickness := size * 3 / 64
-	if thickness < 1 {
-		thickness = 1
+	// Two server-rack slabs, each with a status LED and a vent bar.
+	drawRoundRect(img, s, 5, 6, 17, 7.5, 2, slabFill, slabStroke)
+	drawCircle(img, s, 8.6, 9.75, 1.4, ledGreen)
+	drawRoundRect(img, s, 12, 8.9, 7, 1.7, 0.85, vent, vent)
+
+	drawRoundRect(img, s, 5, 16, 17, 7.5, 2, slabFill, slabStroke)
+	drawCircle(img, s, 8.6, 19.75, 1.4, ledAmber)
+	drawRoundRect(img, s, 12, 18.9, 7, 1.7, 0.85, vent, vent)
+
+	// Prompt chevron overlaid on top, green->blue gradient with a dark outline.
+	chevron := [][2]float64{
+		{15.5, 11}, {26.5, 18.2}, {15.5, 25.4},
+		{15.5, 21.2}, {20.5, 18.2}, {15.5, 15.2},
 	}
-	halfThick := thickness / 2
-
-	// ">" chevron
-	cx, cy := size*6/32, size*8/32
-	mx, my := size*16/32, size*16/32
-	bx, by := size*6/32, size*24/32
-
-	for w := -halfThick; w <= halfThick; w++ {
-		drawLine(img, cx, cy+w, mx, my+w, white, size, radius)
-		drawLine(img, bx, by+w, mx, my+w, white, size, radius)
-	}
-
-	// "_" underscore
-	ux1, ux2, uy := size*18/32, size*26/32, size*24/32
-	for dy := -halfThick; dy <= halfThick; dy++ {
-		for x := ux1; x <= ux2; x++ {
-			if inRoundedRect(x, uy+dy, size, size, radius) {
-				img.Set(x, uy+dy, white)
+	// Gradient axis (14,10)->(27,22) in grid units.
+	gdx, gdy := 27.0-14.0, 22.0-10.0
+	gl2 := gdx*gdx + gdy*gdy
+	stroke := 0.6 // half of the 1.2-unit outline
+	for y := int(9 * s); y <= int(27*s) && y < size; y++ {
+		for x := int(14 * s); x <= int(28*s) && x < size; x++ {
+			if x < 0 || y < 0 {
+				continue
+			}
+			gx, gy := (float64(x)+0.5)/s, (float64(y)+0.5)/s
+			edge := distToPoly(gx, gy, chevron)
+			if edge <= stroke {
+				img.Set(x, y, badge) // outline (same dark as badge)
+				continue
+			}
+			if inPoly(gx, gy, chevron) {
+				t := ((gx-14)*gdx + (gy-10)*gdy) / gl2
+				if t < 0 {
+					t = 0
+				} else if t > 1 {
+					t = 1
+				}
+				img.Set(x, y, color.RGBA{
+					uint8(lerp(float64(green.R), float64(blue.R), t)),
+					uint8(lerp(float64(green.G), float64(blue.G), t)),
+					uint8(lerp(float64(green.B), float64(blue.B), t)),
+					255,
+				})
 			}
 		}
 	}
@@ -83,72 +112,107 @@ func generateImage(size int) *image.RGBA {
 	return img
 }
 
-func inRoundedRect(x, y, w, h int, r float64) bool {
-	fx, fy := float64(x), float64(y)
-	fw, fh := float64(w), float64(h)
-
-	if fx >= r && fx <= fw-r {
-		return true
-	}
-	if fy >= r && fy <= fh-r {
-		return true
-	}
-
-	corners := [][2]float64{
-		{r, r},
-		{fw - r, r},
-		{r, fh - r},
-		{fw - r, fh - r},
-	}
-	for _, c := range corners {
-		dx := fx - c[0]
-		dy := fy - c[1]
-		if dx*dx+dy*dy <= r*r {
-			return true
+// drawRoundRect fills a grid-unit rounded rect with a 1-unit centered stroke.
+func drawRoundRect(img *image.RGBA, s, x, y, w, h, r float64, fill, stroke color.RGBA) {
+	size := img.Bounds().Dx()
+	for py := int(y * s); py <= int((y+h)*s) && py < size; py++ {
+		for px := int(x * s); px <= int((x+w)*s) && px < size; px++ {
+			if px < 0 || py < 0 {
+				continue
+			}
+			gx, gy := (float64(px)+0.5)/s, (float64(py)+0.5)/s
+			switch {
+			case inRR(gx, gy, x+0.5, y+0.5, w-1, h-1, r-0.5):
+				img.Set(px, py, fill)
+			case inRR(gx, gy, x-0.5, y-0.5, w+1, h+1, r+0.5):
+				img.Set(px, py, stroke)
+			}
 		}
 	}
-	return false
 }
 
-func drawLine(img *image.RGBA, x0, y0, x1, y1 int, c color.RGBA, size int, radius float64) {
-	dx := abs(x1 - x0)
-	dy := -abs(y1 - y0)
-	sx := 1
-	if x0 > x1 {
-		sx = -1
+func drawCircle(img *image.RGBA, s, cx, cy, r float64, c color.RGBA) {
+	size := img.Bounds().Dx()
+	for py := int((cy - r) * s); py <= int((cy+r)*s) && py < size; py++ {
+		for px := int((cx - r) * s); px <= int((cx+r)*s) && px < size; px++ {
+			if px < 0 || py < 0 {
+				continue
+			}
+			gx, gy := (float64(px)+0.5)/s, (float64(py)+0.5)/s
+			if dx, dy := gx-cx, gy-cy; dx*dx+dy*dy <= r*r {
+				img.Set(px, py, c)
+			}
+		}
 	}
-	sy := 1
-	if y0 > y1 {
-		sy = -1
-	}
-	err := dx + dy
+}
 
-	for {
-		if x0 >= 0 && x0 < size && y0 >= 0 && y0 < size && inRoundedRect(x0, y0, size, size, radius) {
-			img.Set(x0, y0, c)
-		}
-		if x0 == x1 && y0 == y1 {
-			break
-		}
-		e2 := 2 * err
-		if e2 >= dy {
-			err += dy
-			x0 += sx
-		}
-		if e2 <= dx {
-			err += dx
-			y0 += sy
+// inRR reports whether (gx,gy) lies inside the rounded rect at (x,y,w,h,r).
+func inRR(gx, gy, x, y, w, h, r float64) bool {
+	if r < 0 {
+		r = 0
+	}
+	if gx < x || gx > x+w || gy < y || gy > y+h {
+		return false
+	}
+	cx := clamp(gx, x+r, x+w-r)
+	cy := clamp(gy, y+r, y+h-r)
+	dx, dy := gx-cx, gy-cy
+	return dx*dx+dy*dy <= r*r
+}
+
+// inPoly reports whether (gx,gy) is inside the polygon via crossing number.
+func inPoly(gx, gy float64, poly [][2]float64) bool {
+	in := false
+	n := len(poly)
+	for i, j := 0, n-1; i < n; j, i = i, i+1 {
+		xi, yi := poly[i][0], poly[i][1]
+		xj, yj := poly[j][0], poly[j][1]
+		if (yi > gy) != (yj > gy) &&
+			gx < (xj-xi)*(gy-yi)/(yj-yi)+xi {
+			in = !in
 		}
 	}
+	return in
+}
+
+// distToPoly returns the distance from (gx,gy) to the polygon's boundary.
+func distToPoly(gx, gy float64, poly [][2]float64) float64 {
+	n := len(poly)
+	d := math.MaxFloat64
+	for i, j := 0, n-1; i < n; j, i = i, i+1 {
+		if e := distSeg(gx, gy, poly[j][0], poly[j][1], poly[i][0], poly[i][1]); e < d {
+			d = e
+		}
+	}
+	return d
+}
+
+// distSeg returns the distance from point (px,py) to segment (ax,ay)-(bx,by).
+func distSeg(px, py, ax, ay, bx, by float64) float64 {
+	dx, dy := bx-ax, by-ay
+	l2 := dx*dx + dy*dy
+	if l2 == 0 {
+		return math.Hypot(px-ax, py-ay)
+	}
+	t := ((px-ax)*dx + (py-ay)*dy) / l2
+	if t < 0 {
+		t = 0
+	} else if t > 1 {
+		t = 1
+	}
+	return math.Hypot(px-(ax+t*dx), py-(ay+t*dy))
+}
+
+func clamp(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
 }
 
 func lerp(a, b, t float64) float64 {
 	return a + (b-a)*t
-}
-
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
 }

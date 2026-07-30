@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import type { Server, ExecResult, QuickCommand, ServerInput } from '../lib/types'
 import {
   getServers,
@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingServer, setEditingServer] = useState<Server | null>(null)
   const [execResult, setExecResult] = useState<ExecState | null>(null)
+  const [rerunning, setRerunning] = useState(false)
   const [duplicateData, setDuplicateData] = useState<ServerInput | null>(null)
   const [loading, setLoading] = useState(true)
   const [pingInterval, setPingInterval] = useState(30 * 60 * 1000)
@@ -155,16 +156,23 @@ export default function Dashboard() {
   }
 
   const handleRerun = async () => {
-    if (!execResult || selectedId === null) return
+    if (!execResult || selectedId === null || rerunning) return
     const { command } = execResult
-    setExecResult(null)
+    setRerunning(true)
     const start = performance.now()
     try {
       const result = await execCommand(selectedId, command.command, command.name)
       const elapsed = Math.round(performance.now() - start)
       setExecResult({ result, command, duration: elapsed })
-    } catch {
-      // silently fail on rerun
+    } catch (err) {
+      const elapsed = Math.round(performance.now() - start)
+      setExecResult({
+        result: { output: err instanceof Error ? err.message : 'Command failed', exit_code: -1 },
+        command,
+        duration: elapsed,
+      })
+    } finally {
+      setRerunning(false)
     }
   }
 
@@ -242,6 +250,7 @@ export default function Dashboard() {
         result={execResult?.result ?? null}
         command={execResult?.command ?? null}
         duration={execResult?.duration ?? 0}
+        rerunning={rerunning}
         onClose={() => setExecResult(null)}
         onRerun={handleRerun}
       />

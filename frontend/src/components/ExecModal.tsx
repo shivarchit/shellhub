@@ -5,6 +5,7 @@ interface ExecModalProps {
   result: ExecResult | null
   command: QuickCommand | null
   duration: number
+  rerunning: boolean
   onClose: () => void
   onRerun: () => void
 }
@@ -13,6 +14,7 @@ export default function ExecModal({
   result,
   command,
   duration,
+  rerunning,
   onClose,
   onRerun,
 }: ExecModalProps) {
@@ -77,8 +79,24 @@ export default function ExecModal({
         </div>
 
         {/* Output */}
-        <div className="px-5 py-4 max-h-80 overflow-y-auto">
-          <pre className="text-xs font-mono text-text-primary whitespace-pre-wrap break-words leading-relaxed">
+        <div className="relative px-5 py-4 max-h-80 overflow-y-auto">
+          {rerunning && (
+            <>
+              <div className="absolute top-0 left-0 right-0 h-0.5 bg-accent-amber-dim">
+                <div className="h-full bg-accent-amber animate-progress" />
+              </div>
+              <div className="mb-2 flex items-center gap-2 text-xs text-accent-amber">
+                <span className="w-3 h-3 border-2 border-accent-amber border-t-transparent rounded-full animate-spin" />
+                Running...
+              </div>
+            </>
+          )}
+          <pre
+            className={cn(
+              'text-xs font-mono text-text-primary whitespace-pre-wrap break-words leading-relaxed',
+              rerunning && 'opacity-40'
+            )}
+          >
             {result.output || '(no output)'}
           </pre>
         </div>
@@ -97,9 +115,10 @@ export default function ExecModal({
             </button>
             <button
               onClick={onRerun}
-              className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
+              disabled={rerunning}
+              className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Re-run
+              {rerunning ? 'Running…' : 'Re-run'}
             </button>
             <button
               onClick={onClose}

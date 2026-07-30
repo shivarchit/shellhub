@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import type { Server } from '../lib/types'
 import { cn } from '../lib/utils'
 import { reorderServers } from '../lib/api'

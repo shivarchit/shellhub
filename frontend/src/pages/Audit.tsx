@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import type { ExecRecord, ExecHistoryFilter, Server, AuditEntry } from '../lib/types'
 import { getAllExecHistory, exportExecHistoryCSV, getServers, getAuditLog } from '../lib/api'
 import { cn } from '../lib/utils'

@@ -670,13 +670,14 @@ func (s *Store) DeleteGlobalCommand(id int) error {
 }
 
 type AuditEntry struct {
-	ID        int    `json:"id"`
-	Action    string `json:"action"`
-	ServerID  *int   `json:"server_id"`
-	Details   string `json:"details"`
-	UserID    int    `json:"user_id"`
-	Username  string `json:"username"`
-	CreatedAt string `json:"created_at"`
+	ID         int    `json:"id"`
+	Action     string `json:"action"`
+	ServerID   *int   `json:"server_id"`
+	ServerName string `json:"server_name"`
+	Details    string `json:"details"`
+	UserID     int    `json:"user_id"`
+	Username   string `json:"username"`
+	CreatedAt  string `json:"created_at"`
 }
 
 func (s *Store) LogAudit(action string, serverID *int, details string, userID ...int) error {
@@ -702,8 +703,8 @@ func (s *Store) LogAuditWithUser(action string, serverID *int, details string, u
 
 func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
 	rows, err := s.db.Query(
-		`SELECT id, action, server_id, details, COALESCE(user_id, 0), COALESCE(username, ''), created_at
-		 FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?`,
+		`SELECT a.id, a.action, a.server_id, COALESCE(sv.name, ''), a.details, COALESCE(a.user_id, 0), COALESCE(a.username, ''), a.created_at
+		 FROM audit_log a LEFT JOIN servers sv ON a.server_id = sv.id ORDER BY a.id DESC LIMIT ? OFFSET ?`,
 		limit, offset,
 	)
 	if err != nil {
@@ -713,7 +714,7 @@ func (s *Store) GetAuditLog(limit, offset int) ([]AuditEntry, error) {
 	var entries []AuditEntry
 	for rows.Next() {
 		var e AuditEntry
-		if err := rows.Scan(&e.ID, &e.Action, &e.ServerID, &e.Details, &e.UserID, &e.Username, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.ID, &e.Action, &e.ServerID, &e.ServerName, &e.Details, &e.UserID, &e.Username, &e.CreatedAt); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import type { MetricsResponse } from '../lib/types'
 import { getMetrics } from '../lib/api'
 

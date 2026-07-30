@@ -3,10 +3,157 @@
 @tailwind utilities;
 
 @layer base {
-  * { scrollbar-width: thin; scrollbar-color: #253345 #0b1120; }
+  /* Dark theme (default) — exact original palette, as RGB channels for rgb(var / <alpha>) */
+  :root {
+    --sh-surface-900: 6 9 15;
+    --sh-surface-800: 11 17 32;
+    --sh-surface-700: 17 24 39;
+    --sh-surface-600: 26 35 50;
+    --sh-surface-500: 30 45 63;
+    --sh-border: 28 42 58;
+    --sh-border-medium: 37 51 69;
+    --sh-accent-green: 34 197 94;
+    --sh-accent-green-dim: 6 78 59;
+    --sh-accent-green-bg: 5 46 22;
+    --sh-accent-red: 239 68 68;
+    --sh-accent-red-dim: 127 29 29;
+    --sh-accent-red-bg: 69 10 10;
+    --sh-accent-amber: 245 158 11;
+    --sh-accent-amber-dim: 69 26 3;
+    --sh-accent-amber-bg: 39 23 4;
+    --sh-accent-blue: 59 130 246;
+    --sh-accent-blue-dim: 29 63 122;
+    --sh-text-primary: 232 237 245;
+    --sh-text-secondary: 139 151 168;
+    --sh-text-muted: 79 93 110;
+    --sh-text-dimmed: 45 56 72;
+  }
+
+  /* Light theme — real light surfaces, dark text, recognizable accent hues */
+  :root[data-theme='light'] {
+    --sh-surface-900: 241 245 249;
+    --sh-surface-800: 255 255 255;
+    --sh-surface-700: 233 238 244;
+    --sh-surface-600: 220 227 236;
+    --sh-surface-500: 203 213 225;
+    --sh-border: 216 223 232;
+    --sh-border-medium: 194 203 214;
+    --sh-accent-green: 22 163 74;
+    --sh-accent-green-dim: 187 247 208;
+    --sh-accent-green-bg: 220 252 231;
+    --sh-accent-red: 220 38 38;
+    --sh-accent-red-dim: 254 202 202;
+    --sh-accent-red-bg: 254 226 226;
+    --sh-accent-amber: 217 119 6;
+    --sh-accent-amber-dim: 253 230 138;
+    --sh-accent-amber-bg: 254 243 199;
+    --sh-accent-blue: 37 99 235;
+    --sh-accent-blue-dim: 219 234 254;
+    --sh-text-primary: 15 23 42;
+    --sh-text-secondary: 71 85 105;
+    --sh-text-muted: 100 116 139;
+    --sh-text-dimmed: 203 213 225;
+  }
+
+  /* Midnight — strong deep-navy cast, indigo/violet blue accent (reads "blue" at a glance) */
+  :root[data-theme='midnight'] {
+    --sh-surface-900: 2 6 23;
+    --sh-surface-800: 8 13 40;
+    --sh-surface-700: 15 23 58;
+    --sh-surface-600: 22 32 70;
+    --sh-surface-500: 30 41 82;
+    --sh-border: 35 48 92;
+    --sh-border-medium: 48 64 120;
+    --sh-accent-blue: 129 140 248;
+    --sh-accent-blue-dim: 49 46 129;
+    --sh-text-primary: 224 231 255;
+    --sh-text-secondary: 148 163 210;
+    --sh-text-muted: 100 116 160;
+    --sh-text-dimmed: 51 65 110;
+  }
+
+  /* Nord — polar night surfaces, frost/aurora accents */
+  :root[data-theme='nord'] {
+    --sh-surface-900: 46 52 64;
+    --sh-surface-800: 59 66 82;
+    --sh-surface-700: 67 76 94;
+    --sh-surface-600: 76 86 106;
+    --sh-surface-500: 94 104 122;
+    --sh-border: 67 76 94;
+    --sh-border-medium: 88 99 120;
+    --sh-accent-green: 163 190 140;
+    --sh-accent-green-dim: 74 90 61;
+    --sh-accent-green-bg: 46 56 38;
+    --sh-accent-red: 191 97 106;
+    --sh-accent-red-dim: 90 47 51;
+    --sh-accent-red-bg: 64 34 37;
+    --sh-accent-amber: 235 203 139;
+    --sh-accent-amber-dim: 90 74 40;
+    --sh-accent-amber-bg: 64 52 30;
+    --sh-accent-blue: 136 192 208;
+    --sh-accent-blue-dim: 44 74 84;
+    --sh-text-primary: 236 239 244;
+    --sh-text-secondary: 216 222 233;
+    --sh-text-muted: 154 165 184;
+    --sh-text-dimmed: 76 86 106;
+  }
+
+  /* Dracula — #282a36 family surfaces, purple as the blue accent */
+  :root[data-theme='dracula'] {
+    --sh-surface-900: 33 34 44;
+    --sh-surface-800: 40 42 54;
+    --sh-surface-700: 52 54 68;
+    --sh-surface-600: 68 71 90;
+    --sh-surface-500: 88 91 112;
+    --sh-border: 68 71 90;
+    --sh-border-medium: 88 91 112;
+    --sh-accent-green: 80 250 123;
+    --sh-accent-green-dim: 30 77 43;
+    --sh-accent-green-bg: 20 56 32;
+    --sh-accent-red: 255 85 85;
+    --sh-accent-red-dim: 92 38 38;
+    --sh-accent-red-bg: 64 28 28;
+    --sh-accent-amber: 224 200 96;
+    --sh-accent-amber-dim: 77 67 26;
+    --sh-accent-amber-bg: 56 48 20;
+    --sh-accent-blue: 189 147 249;
+    --sh-accent-blue-dim: 59 47 92;
+    --sh-text-primary: 248 248 242;
+    --sh-text-secondary: 191 196 217;
+    --sh-text-muted: 98 114 164;
+    --sh-text-dimmed: 68 71 90;
+  }
+
+  /* Matrix — green-on-black terminal; blue accent overridden to bright green */
+  :root[data-theme='matrix'] {
+    --sh-surface-900: 0 8 2;
+    --sh-surface-800: 2 15 6;
+    --sh-surface-700: 4 22 10;
+    --sh-surface-600: 8 32 15;
+    --sh-surface-500: 14 46 22;
+    --sh-border: 20 60 30;
+    --sh-border-medium: 30 85 42;
+    --sh-accent-green: 0 230 80;
+    --sh-accent-green-dim: 6 60 22;
+    --sh-accent-green-bg: 4 40 15;
+    --sh-accent-red: 255 90 90;
+    --sh-accent-red-dim: 70 20 20;
+    --sh-accent-red-bg: 45 12 12;
+    --sh-accent-amber: 220 200 60;
+    --sh-accent-amber-dim: 60 52 15;
+    --sh-accent-amber-bg: 40 35 10;
+    --sh-accent-blue: 100 255 140;
+    --sh-accent-blue-dim: 8 60 25;
+    --sh-text-primary: 190 255 200;
+    --sh-text-secondary: 90 200 120;
+    --sh-text-muted: 50 130 75;
+    --sh-text-dimmed: 25 70 40;
+  }
+
+  * { scrollbar-width: thin; scrollbar-color: rgb(var(--sh-border-medium)) rgb(var(--sh-surface-800)); }
   ::-webkit-scrollbar { width: 6px; }
-  ::-webkit-scrollbar-track { background: #0b1120; }
-  ::-webkit-scrollbar-thumb { background: #253345; border-radius: 3px; }
+  ::-webkit-scrollbar-track { background: rgb(var(--sh-surface-800)); }
+  ::-webkit-scrollbar-thumb { background: rgb(var(--sh-border-medium)); border-radius: 3px; }
 }
 
 @keyframes pulse-dot {

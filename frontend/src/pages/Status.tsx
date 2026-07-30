@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { getServers, pingServer, getMetrics } from '../lib/api'
 import type { Server, MetricsResponse } from '../lib/types'
 

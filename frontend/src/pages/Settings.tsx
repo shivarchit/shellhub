@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router'
 import { getSettings, updateSettings, exportData, importData, getLoginAttempts, getGlobalCommands, createGlobalCommand, updateGlobalCommand, deleteGlobalCommand, getDbTables, queryDbTable, getUsers, createNewUser, deleteUser, updateUserRole, getUserServers, updateUserServers, changePassword, getServers, updateUserPermissions } from '../lib/api'
 import type { UserPermissionsPayload } from '../lib/api'
 import type { LoginAttempt, GlobalCommand, GlobalCommandInput, Server } from '../lib/types'
 import { useAuth } from '../lib/auth'
+import { useTheme } from '../lib/theme'
 
 interface UserRecord {
   id: number
@@ -11,11 +12,33 @@ interface UserRecord {
   role: string
   created_at: string
   last_login: string
+  permissions?: UserPermissionsPayload
+}
+
+// [surface, accent-blue, accent-green] preview hexes per theme
+const THEME_SWATCHES: Record<string, [string, string, string]> = {
+  dark: ['#06090f', '#3b82f6', '#22c55e'],
+  midnight: ['#020617', '#818cf8', '#22c55e'],
+  light: ['#f1f5f9', '#2563eb', '#16a34a'],
+  nord: ['#2e3440', '#88c0d0', '#a3be8c'],
+  dracula: ['#282a36', '#bd93f9', '#50fa7b'],
+  matrix: ['#000802', '#64ff8c', '#00e650'],
+}
+
+const DEFAULT_PERMS: UserPermissionsPayload = {
+  can_view_recordings: false,
+  can_view_metrics: false,
+  can_view_audit: false,
+  can_manage_servers: false,
+  can_exec_commands: true,
+  can_open_terminal: true,
+  can_view_db: false,
 }
 
 export default function Settings() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
+  const { theme, setTheme, themes } = useTheme()
   const [pingInterval, setPingInterval] = useState('30')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -24,7 +47,7 @@ export default function Settings() {
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState('')
   const [loginAttempts, setLoginAttempts] = useState<LoginAttempt[]>([])
-  const tabs = ['general', 'commands', 'security', ...(user?.role === 'superadmin' ? ['database', 'users'] : [])] as const
+  const tabs = ['general', 'commands', 'security', ...(user?.permissions?.can_view_db ? ['database'] : []), ...(user?.role === 'superadmin' ? ['users'] : [])] as const
   const [activeTab, setActiveTab] = useState<string>('general')
   const [globalCmds, setGlobalCmds] = useState<GlobalCommand[]>([])
   const [editingGlobal, setEditingGlobal] = useState<GlobalCommand | null>(null)
@@ -61,15 +84,7 @@ export default function Settings() {
   const [userServerIds, setUserServerIds] = useState<number[]>([])
   const [savingServers, setSavingServers] = useState(false)
   const [editingPermsFor, setEditingPermsFor] = useState<UserRecord | null>(null)
-  const [editPerms, setEditPerms] = useState<UserPermissionsPayload>({
-    can_view_recordings: false,
-    can_view_metrics: false,
-    can_view_audit: false,
-    can_manage_servers: false,
-    can_exec_commands: true,
-    can_open_terminal: true,
-    can_view_db: false,
-  })
+  const [editPerms, setEditPerms] = useState<UserPermissionsPayload>(DEFAULT_PERMS)
   const [savingPerms, setSavingPerms] = useState(false)
 
 
@@ -256,17 +271,11 @@ export default function Settings() {
     }
   }
 
-  const handleEditPerms = async (u: UserRecord) => {
+  const handleEditPerms = (u: UserRecord) => {
+    // Initialize from the target user (defaults fill any missing flags) before
+    // opening the modal, so perms from a previously edited user can't leak in.
+    setEditPerms({ ...DEFAULT_PERMS, ...(u.permissions ?? {}) })
     setEditingPermsFor(u)
-    try {
-      const allUsers = await getUsers()
-      const target = allUsers.find((usr: any) => usr.id === u.id)
-      if (target?.permissions) {
-        setEditPerms(target.permissions)
-      }
-    } catch {
-      // use defaults
-    }
   }
 
   const handleSavePerms = async () => {
@@ -408,6 +417,40 @@ export default function Settings() {
                     <span className="text-sm text-accent-green">Settings saved</span>
                   )}
                 </div>
+              </div>
+
+              {/* Theme section */}
+              <div className="bg-surface-800 border border-border rounded-xl p-6 mt-6">
+                <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted mb-4">
+                  Theme
+                </h2>
+                <div className="flex flex-wrap gap-2">
+                  {themes.map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setTheme(t)}
+                      className={`flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg border capitalize transition-colors ${
+                        theme === t
+                          ? 'bg-accent-blue-dim border-accent-blue text-accent-blue'
+                          : 'bg-surface-900 border-border text-text-secondary hover:text-text-primary hover:border-border-medium'
+                      }`}
+                    >
+                      <span className="flex gap-1">
+                        {THEME_SWATCHES[t].map((c, i) => (
+                          <span
+                            key={i}
+                            className="w-2.5 h-2.5 rounded-full border border-black/20"
+                            style={{ backgroundColor: c }}
+                          />
+                        ))}
+                      </span>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-text-muted mt-2">
+                  Choose your preferred color theme. Applied instantly.
+                </p>
               </div>
 
               {/* Export & Import section */}

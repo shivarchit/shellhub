@@ -40,7 +40,6 @@ func resolveDBPath(dbFlag string) string {
 func Run(portFlag int, dbFlag string, startServer ServerFunc, openBrowser OpenBrowserFunc) {
 	onReady := func() {
 		systray.SetIcon(GenerateIcon())
-		systray.SetTitle("ShellHub")
 
 		port, err := settings.ResolvePort(portFlag)
 		if err != nil {

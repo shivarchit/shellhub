@@ -4,15 +4,36 @@ export default {
   theme: {
     extend: {
       colors: {
-        surface: { 900: '#06090f', 800: '#0b1120', 700: '#111827', 600: '#1a2332', 500: '#1e2d3f' },
-        border: { DEFAULT: '#1c2a3a', medium: '#253345' },
-        accent: {
-          green: '#22c55e', 'green-dim': '#064e3b', 'green-bg': '#052e16',
-          red: '#ef4444', 'red-dim': '#7f1d1d', 'red-bg': '#450a0a',
-          amber: '#f59e0b', 'amber-dim': '#451a03', 'amber-bg': '#271704',
-          blue: '#3b82f6', 'blue-dim': '#1d3f7a',
+        surface: {
+          900: 'rgb(var(--sh-surface-900) / <alpha-value>)',
+          800: 'rgb(var(--sh-surface-800) / <alpha-value>)',
+          700: 'rgb(var(--sh-surface-700) / <alpha-value>)',
+          600: 'rgb(var(--sh-surface-600) / <alpha-value>)',
+          500: 'rgb(var(--sh-surface-500) / <alpha-value>)',
         },
-        text: { primary: '#e8edf5', secondary: '#8b97a8', muted: '#4f5d6e', dimmed: '#2d3848' },
+        border: {
+          DEFAULT: 'rgb(var(--sh-border) / <alpha-value>)',
+          medium: 'rgb(var(--sh-border-medium) / <alpha-value>)',
+        },
+        accent: {
+          green: 'rgb(var(--sh-accent-green) / <alpha-value>)',
+          'green-dim': 'rgb(var(--sh-accent-green-dim) / <alpha-value>)',
+          'green-bg': 'rgb(var(--sh-accent-green-bg) / <alpha-value>)',
+          red: 'rgb(var(--sh-accent-red) / <alpha-value>)',
+          'red-dim': 'rgb(var(--sh-accent-red-dim) / <alpha-value>)',
+          'red-bg': 'rgb(var(--sh-accent-red-bg) / <alpha-value>)',
+          amber: 'rgb(var(--sh-accent-amber) / <alpha-value>)',
+          'amber-dim': 'rgb(var(--sh-accent-amber-dim) / <alpha-value>)',
+          'amber-bg': 'rgb(var(--sh-accent-amber-bg) / <alpha-value>)',
+          blue: 'rgb(var(--sh-accent-blue) / <alpha-value>)',
+          'blue-dim': 'rgb(var(--sh-accent-blue-dim) / <alpha-value>)',
+        },
+        text: {
+          primary: 'rgb(var(--sh-text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--sh-text-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--sh-text-muted) / <alpha-value>)',
+          dimmed: 'rgb(var(--sh-text-dimmed) / <alpha-value>)',
+        },
       },
       fontFamily: {
         sans: ['DM Sans', 'system-ui', 'sans-serif'],

@@ -10,7 +10,7 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Server Dashboard** — manage servers grouped by environment, see online/offline status at a glance
 - **Interactive Terminal** — full xterm.js terminal in the browser with color support, resize, and tab completion
 - **Quick Commands** — save named commands per server (flush cache, restart service, tail logs) and run them with one click
-- **Command Execution** — run quick commands from the dashboard without opening a full terminal session, see output in a modal
+- **Command Execution** — run quick commands from the dashboard without opening a full terminal session, see output in a modal with re-run and live running indicator
 - **SSH Key Auth** — supports both password and private key authentication
 - **System Tray App** — runs in the system tray with no console window. Right-click for "Open in Browser" and "Stop Server"
 - **Single Binary** — Go embeds the entire React frontend, deploy one file and you're done
@@ -29,6 +29,7 @@ Built with Go + React. Ships as a single binary with system tray support.
 ### User Management & Permissions
 - **Role-Based Access** — superadmin and user roles with granular permission control
 - **Per-User Permissions** — toggle access to: terminal, commands, server management, recordings, metrics, audit, database browser
+- **Server-Side Enforcement** — permission flags enforced by API middleware (403 on denial), not just hidden in the UI: metrics, audit, recordings, database browser, command exec, and terminal access
 - **Server Assignment** — assign specific servers to each user (superadmin sees all)
 - **User CRUD** — create, delete users, change roles from Settings > Users tab
 - **Change Password** — all users can change their own password from Settings > Security
@@ -47,6 +48,7 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **Built-in Variables** — auto-resolve `{{hostname}}`, `{{username}}`, `{{port}}`, `{{date}}`, `{{server_name}}`
 - **Full Audit Trail** — dedicated `/audit` page with Commands and Actions tabs, filtering, search, pagination, CSV export
 - **User Attribution** — every audit entry shows which user performed the action (including terminal connect/disconnect)
+- **Server Attribution** — activity feed and audit entries show which server each action targeted
 - **Command Name Tracking** — audit trail distinguishes between command name (friendly label) and command text (actual shell command)
 - **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
 
@@ -63,11 +65,12 @@ Built with Go + React. Ships as a single binary with system tray support.
 - **CSS/SVG Charts** — lightweight visualization with no external charting libraries
 
 ### Admin Tools
-- **Database Browser** — browse all SQLite tables and data from Settings > Database tab (superadmin only)
+- **Database Browser** — browse all SQLite tables and data from Settings > Database tab (requires View Database permission)
 - **User Management** — create users, assign roles, set permissions, assign servers (superadmin only)
 - **Export / Import** — backup and restore your server configs as JSON
 
 ### Organization
+- **Themes** — six color themes (dark, midnight, light, nord, dracula, matrix), switchable from Settings → General
 - **Drag & Drop** — reorder servers within groups by dragging
 - **Toast Notifications** — real-time feedback when commands complete
 - **Keyboard Shortcuts** — `Ctrl+K` to focus server search
@@ -172,6 +175,8 @@ Open `http://localhost:5173` for the frontend with hot reload.
 
 Superadmin can toggle any permission per user from Settings > Users > Permissions.
 
+Permission flags are enforced server-side by API middleware, not just hidden in the UI.
+
 Regular users only see servers assigned to them by the superadmin.
 
 ## Settings
@@ -180,6 +185,7 @@ Access settings via the gear icon in the sidebar or navigate to `/settings`.
 
 **General:**
 - Ping Interval — how often to check server online/offline status (default: 30 minutes)
+- Theme — choose dark, midnight, light, nord, dracula, or matrix (applied instantly, persisted)
 - Export/Import — backup and restore server configs as JSON
 
 **Commands:**
@@ -191,7 +197,7 @@ Access settings via the gear icon in the sidebar or navigate to `/settings`.
 - Login Attempts — view all login attempts with success/failure status
 - Security Info — overview of encryption and auth measures in place
 
-**Database** (superadmin only):
+**Database** (requires View Database permission):
 - Browse all SQLite tables
 - View rows with pagination
 

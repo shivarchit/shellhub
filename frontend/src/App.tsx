@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import Dashboard from './pages/Dashboard'
 import Terminal from './pages/Terminal'
 import Settings from './pages/Settings'
@@ -10,6 +10,7 @@ import Guide from './pages/Guide'
 import Status from './pages/Status'
 import ToastProvider from './components/ToastProvider'
 import { AuthProvider, useAuth } from './lib/auth'
+import { ThemeProvider } from './lib/theme'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { authenticated, setupRequired, loading } = useAuth()
@@ -42,7 +43,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-      <Route path="/terminal/:id" element={<ProtectedRoute><Terminal /></ProtectedRoute>} />
+      <Route path="/terminal/:id" element={<ProtectedRoute><RequirePermission permission="can_open_terminal"><Terminal /></RequirePermission></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/audit" element={<ProtectedRoute><RequirePermission permission="can_view_audit"><Audit /></RequirePermission></ProtectedRoute>} />
       <Route path="/recordings" element={<ProtectedRoute><RequirePermission permission="can_view_recordings"><Recordings /></RequirePermission></ProtectedRoute>} />
@@ -56,12 +57,14 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ToastProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </ToastProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ToastProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </ToastProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

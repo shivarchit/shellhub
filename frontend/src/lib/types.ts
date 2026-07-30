@@ -85,6 +85,7 @@ export interface AuditEntry {
   id: number
   action: string
   server_id: number | null
+  server_name?: string
   details: string
   user_id?: number
   username?: string

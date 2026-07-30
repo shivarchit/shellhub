@@ -71,6 +71,11 @@ export default function ActivityFeed() {
                 <span className="text-xs text-text-muted">
                   {entry.action.replace(/_/g, ' ')}
                 </span>
+                {entry.server_name && (
+                  <span className="text-xs text-text-muted truncate">
+                    on <span className="text-text-secondary">{entry.server_name}</span>
+                  </span>
+                )}
               </div>
               {entry.details && (
                 <p className="text-xs text-text-muted font-mono truncate mt-0.5">
