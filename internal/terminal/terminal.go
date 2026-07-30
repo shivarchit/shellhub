@@ -62,6 +62,15 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	userID, _ := strconv.Atoi(r.Header.Get("X-User-ID"))
 	username := r.Header.Get("X-Username")
 
+	// Permission check (before upgrade). Setup mode (userID 0) and superadmins
+	// pass; anyone else needs can_open_terminal. Fails closed on lookup error.
+	if userID != 0 && r.Header.Get("X-User-Role") != "superadmin" && h.authStore != nil {
+		if u, err := h.authStore.GetUser(userID); err != nil || !u.Permissions.CanOpenTerminal {
+			http.Error(w, `{"error":"permission denied"}`, 403)
+			return
+		}
+	}
+
 	wsConn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("websocket upgrade failed: %v", err)

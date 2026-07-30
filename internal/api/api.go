@@ -38,11 +38,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("PUT /api/servers/{id}", h.updateServer)
 	mux.HandleFunc("DELETE /api/servers/{id}", h.deleteServer)
 	mux.HandleFunc("POST /api/servers/{id}/ping", h.pingServer)
-	mux.HandleFunc("POST /api/servers/{id}/exec", h.execCommand)
+	mux.HandleFunc("POST /api/servers/{id}/exec", h.requirePerm(h.execCommand, func(p auth.UserPermissions) bool { return p.CanExecCommands }))
 	mux.HandleFunc("POST /api/ping", h.pingHost)
 	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
 	mux.HandleFunc("GET /api/servers/{id}/exec-history", h.getExecHistory)
-	mux.HandleFunc("GET /api/audit-log", h.getAuditLog)
+	mux.HandleFunc("GET /api/audit-log", h.requirePerm(h.getAuditLog, func(p auth.UserPermissions) bool { return p.CanViewAudit }))
 	mux.HandleFunc("GET /api/exec-history", h.getAllExecHistory)
 	mux.HandleFunc("GET /api/exec-history/export", h.exportExecHistory)
 	mux.HandleFunc("GET /api/settings", h.getSettings)
@@ -53,13 +53,32 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/global-commands", h.createGlobalCommand)
 	mux.HandleFunc("PUT /api/global-commands/{id}", h.updateGlobalCommand)
 	mux.HandleFunc("DELETE /api/global-commands/{id}", h.deleteGlobalCommand)
-	mux.HandleFunc("GET /api/recordings", h.listRecordings)
-	mux.HandleFunc("GET /api/recordings/{id}", h.getRecording)
-	mux.HandleFunc("DELETE /api/recordings/{id}", h.deleteRecording)
+	mux.HandleFunc("GET /api/recordings", h.requirePerm(h.listRecordings, func(p auth.UserPermissions) bool { return p.CanViewRecordings }))
+	mux.HandleFunc("GET /api/recordings/{id}", h.requirePerm(h.getRecording, func(p auth.UserPermissions) bool { return p.CanViewRecordings }))
+	mux.HandleFunc("DELETE /api/recordings/{id}", h.requirePerm(h.deleteRecording, func(p auth.UserPermissions) bool { return p.CanViewRecordings }))
 	mux.HandleFunc("GET /api/servers/{id}/stats", h.getServerStats)
-	mux.HandleFunc("GET /api/metrics", h.getMetrics)
-	mux.HandleFunc("GET /api/db/tables", h.listTables)
-	mux.HandleFunc("GET /api/db/query", h.queryTable)
+	mux.HandleFunc("GET /api/metrics", h.requirePerm(h.getMetrics, func(p auth.UserPermissions) bool { return p.CanViewMetrics }))
+	mux.HandleFunc("GET /api/db/tables", h.requirePerm(h.listTables, func(p auth.UserPermissions) bool { return p.CanViewDB }))
+	mux.HandleFunc("GET /api/db/query", h.requirePerm(h.queryTable, func(p auth.UserPermissions) bool { return p.CanViewDB }))
+}
+
+// requirePerm wraps a handler, rejecting requests whose user lacks the
+// permission selected by check. Setup mode (unauthenticated) and superadmins
+// always pass; on any lookup failure it fails closed (403).
+func (h *Handler) requirePerm(next http.HandlerFunc, check func(auth.UserPermissions) bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID, _ := getUserFromRequest(r)
+		if userID == 0 || isSuperAdmin(r) {
+			next(w, r)
+			return
+		}
+		user, err := h.authStore.GetUser(userID)
+		if err != nil || !check(user.Permissions) {
+			writeError(w, 403, "permission denied")
+			return
+		}
+		next(w, r)
+	}
 }
 
 func getUserFromRequest(r *http.Request) (int, string) {
