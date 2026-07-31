@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router'
 import { useAuth } from '../lib/auth'
+import Logo from '../components/Logo'
 
 const BOOT_LINES = [
   '[boot] ShellHub v1.0 initializing...',
@@ -170,24 +171,10 @@ export default function Login() {
             {/* Logo / Title */}
             <div className="text-center mb-8">
               <div
-                className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-accent-blue/10 border border-accent-blue/20 mb-4"
+                className="inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-4"
                 style={{ animation: 'glow-pulse 3s ease-in-out infinite' }}
               >
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" className="text-accent-blue">
-                  <path
-                    d="M4 17L10 11L4 5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path
-                    d="M12 19H20"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
+                <Logo size={48} />
               </div>
               <h1 className="text-3xl font-bold text-text-primary">ShellHub</h1>
               <p className="text-sm text-text-muted mt-1">
