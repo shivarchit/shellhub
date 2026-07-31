@@ -6,6 +6,11 @@ param(
 
 $Root = Resolve-Path "$PSScriptRoot/.."
 
+# Version stamped into the binary via -ldflags. Override with $env:VERSION.
+$Version = if ($env:VERSION) { $env:VERSION } else { (git describe --tags --always 2>$null) }
+if (-not $Version) { $Version = "dev" }
+$VLdflags = "-X main.version=$Version"
+
 function Build-Frontend {
     Write-Host "Building frontend..." -ForegroundColor Cyan
     Push-Location "$Root/frontend"
@@ -20,9 +25,9 @@ function Build-Binary($os, $arch, $output) {
     $env:GOOS = $os
     $env:GOARCH = $arch
     if ($os -eq "windows") {
-        go build -ldflags "-H windowsgui" -o "build/$output" .
+        go build -ldflags "-H windowsgui $VLdflags" -o "build/$output" .
     } else {
-        go build -o "build/$output" .
+        go build -ldflags "$VLdflags" -o "build/$output" .
     }
     Remove-Item Env:GOOS
     Remove-Item Env:GOARCH
@@ -43,7 +48,7 @@ switch ($Target) {
         Build-Frontend
         Write-Host "Building shellhub.exe..." -ForegroundColor Cyan
         Push-Location $Root
-        go build -ldflags "-H windowsgui" -o shellhub.exe .
+        go build -ldflags "-H windowsgui $VLdflags" -o shellhub.exe .
         Pop-Location
         Write-Host "Done: shellhub.exe (in project root)" -ForegroundColor Green
     }

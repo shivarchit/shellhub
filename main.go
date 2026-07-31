@@ -27,6 +27,9 @@ import (
 //go:embed all:frontend/dist
 var frontendFS embed.FS
 
+// version is injected at build time via -ldflags "-X main.version=...".
+var version = "dev"
+
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if origin := r.Header.Get("Origin"); origin != "" {
@@ -118,7 +121,25 @@ func runServer(port int, dbPath string, dev bool) error {
 	}
 
 	addr := fmt.Sprintf(":%d", port)
-	log.Printf("ShellHub server listening on %s", addr)
+
+	// Startup banner. Console (dev) mode prints plainly; tray/background
+	// mode goes through log so it lands in whatever log sink is attached.
+	mode := "tray active"
+	if dev {
+		mode = "dev mode (no tray)"
+	}
+	servers, _ := store.GetServers()
+	line1 := fmt.Sprintf("ShellHub %s — serving on http://localhost:%d", version, port)
+	line2 := fmt.Sprintf("database: %s · %d servers loaded · %s", dbPath, len(servers), mode)
+	if dev {
+		fmt.Println(line1)
+		fmt.Println(line2)
+		fmt.Println("ready")
+	} else {
+		log.Println(line1)
+		log.Println(line2)
+		log.Println("ready")
+	}
 
 	// Background ping job for uptime metrics
 	go func() {
@@ -163,7 +184,13 @@ func main() {
 	port := flag.Int("port", settings.DefaultPort, "server port")
 	dbFlag := flag.String("db", "shellhub.db", "database file path")
 	dev := flag.Bool("dev", false, "development mode (console, no tray)")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("ShellHub %s\n", version)
+		return
+	}
 
 	// Detect whether -port was explicitly passed (flag.Visit only visits set flags).
 	// 0 = no override; any positive value (including DefaultPort) = explicit.
@@ -182,15 +209,6 @@ func main() {
 		if err != nil {
 			log.Fatalf("Cannot start server: %v", err)
 		}
-
-		fmt.Println()
-		fmt.Println("  ShellHub is running! (dev mode)")
-		fmt.Println()
-		fmt.Printf("  Open in browser:  http://localhost:%d\n", boundPort)
-		fmt.Printf("  Database:         %s\n", *dbFlag)
-		fmt.Println()
-		fmt.Println("  Press Ctrl+C to stop.")
-		fmt.Println()
 
 		if err := runServer(boundPort, *dbFlag, true); err != nil {
 			log.Fatal(err)

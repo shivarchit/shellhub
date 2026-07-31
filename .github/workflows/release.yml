@@ -150,7 +150,7 @@ jobs:
             fi
           fi
           OUT="dist/shellhub-${{ matrix.name }}${{ matrix.ext }}"
-          go build -trimpath -ldflags "${{ matrix.ldflags }}" -o "$OUT" .
+          go build -trimpath -ldflags "${{ matrix.ldflags }} -X main.version=$VERSION" -o "$OUT" .
           
           # Run native packaging scripts based on target OS
           if [ "${{ matrix.goos }}" = "darwin" ]; then
