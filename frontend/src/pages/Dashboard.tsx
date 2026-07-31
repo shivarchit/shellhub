@@ -16,6 +16,7 @@ import AddEditServerModal from '../components/AddEditServerModal'
 import ExecModal from '../components/ExecModal'
 import ActivityFeed from '../components/ActivityFeed'
 import BroadcastModal from '../components/BroadcastModal'
+import Logo from '../components/Logo'
 import { useAuth } from '../lib/auth'
 
 interface ExecState {
@@ -224,10 +225,8 @@ export default function Dashboard() {
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center px-6">
           <div className="text-center mb-8">
-            <div className="flex items-center justify-center w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-500/20 to-blue-700/20 border border-accent-blue/20">
-              <span className="text-2xl font-mono text-accent-blue font-bold">
-                {'>'}_
-              </span>
+            <div className="flex items-center justify-center mx-auto mb-4">
+              <Logo size={64} />
             </div>
             <h2 className="text-xl font-semibold text-text-primary mb-2">
               Welcome to ShellHub
