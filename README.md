@@ -1,94 +1,202 @@
-# ShellHub
+<p align="center">
+  <img src="assets/banner.svg" alt="ShellHub — your servers, one hub" width="100%">
+</p>
 
-A lightweight web-based SSH client and server management tool. Connect to your servers, run commands, and manage quick shortcuts — all from the browser.
+<p align="center">
+  <img src="https://img.shields.io/github/v/release/shivarchit/shellhub?style=flat-square&color=3fb950&label=release" alt="release">
+  <img src="https://img.shields.io/badge/go-1.25-00ADD8?style=flat-square" alt="go 1.25">
+  <img src="https://img.shields.io/badge/react-19-087ea4?style=flat-square" alt="react 19">
+  <img src="https://img.shields.io/badge/platforms-macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-8250df?style=flat-square" alt="platforms">
+  <img src="https://img.shields.io/badge/license-MIT-db6d28?style=flat-square" alt="license MIT">
+</p>
 
-Built with Go + React. Ships as a single binary with system tray support.
+<p align="center">
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#api-endpoints">API</a> ·
+  <a href="#cross-platform-builds">Builds</a>
+</p>
+
+A lightweight web-based SSH client and server management tool. Connect to your servers, run commands, browse files, and manage quick shortcuts — all from the browser. Built with Go and React, it ships as a single self-contained binary with system tray support.
+
+<p align="center">
+  <img src="assets/demo.svg" alt="ShellHub startup — one binary serving on localhost:8080" width="100%">
+</p>
+
+<img src="docs/screens/dashboard.png" alt="Server dashboard" width="100%">
+
+Server dashboard with live status, quick commands, and activity feed.
 
 ## Features
 
-### Core
-- **Server Dashboard** — manage servers grouped by environment, see online/offline status at a glance
-- **Interactive Terminal** — full xterm.js terminal in the browser with color support, resize, and tab completion
-- **Quick Commands** — save named commands per server (flush cache, restart service, tail logs) and run them with one click
-- **Command Execution** — run quick commands from the dashboard without opening a full terminal session, see output in a modal with re-run and live running indicator
-- **SSH Key Auth** — supports both password and private key authentication
-- **System Tray App** — runs in the system tray with no console window. Right-click for "Open in Browser" and "Stop Server"
-- **Single Binary** — Go embeds the entire React frontend, deploy one file and you're done
-- **SQLite Storage** — servers and commands stored in a local SQLite database, managed entirely from the web UI
-- **YAML Import** — optionally bootstrap from a `servers.yaml` file on first run
+<!-- Web Terminal -->
+<table>
+<tr>
+<td width="52%">
 
-### Authentication & Security
-- **Login System** — username/password authentication with bcrypt password hashing
-- **Session Tokens** — HMAC-SHA256 tokens in httpOnly cookies (24h expiry)
-- **Encrypted Credentials** — server passwords and SSH keys encrypted at rest with AES-256-GCM
-- **Rate Limiting** — accounts locked after 5 failed login attempts in 10 minutes (auto-unlock after 30 min)
-- **Superadmin** — first user auto-promoted to superadmin with full access
-- **Login Audit** — all login attempts (success/failure) logged with IP and user agent
-- **Copy on Select** — terminal auto-copies selected text, Ctrl+C copies when text selected (SIGINT otherwise)
+<img src="docs/screens/terminal.png" alt="Web terminal session" width="100%">
 
-### User Management & Permissions
-- **Role-Based Access** — superadmin and user roles with granular permission control
-- **Per-User Permissions** — toggle access to: terminal, commands, server management, recordings, metrics, audit, database browser
-- **Server-Side Enforcement** — permission flags enforced by API middleware (403 on denial), not just hidden in the UI: metrics, audit, recordings, database browser, command exec, and terminal access
-- **Server Assignment** — assign specific servers to each user (superadmin sees all)
-- **User CRUD** — create, delete users, change roles from Settings > Users tab
-- **Change Password** — all users can change their own password from Settings > Security
-- **Audit Trail with User** — all actions and commands tracked with who performed them
+</td>
+<td width="48%">
 
-### Terminal Power
-- **Multi-Tab Terminals** — open multiple terminal sessions simultaneously (Ctrl+T to open, Ctrl+W to close, Ctrl+1-9 to switch)
-- **Terminal Search** — Ctrl+F to search scrollback with regex, case sensitivity, and match navigation
-- **Session Recording** — record terminal sessions in asciicast v2 format with one-click toggle
-- **Recording Playback** — full player with play/pause, speed control (0.5x-4x), seek bar, and idle-skip
-- **Download Recordings** — export as `.cast` files compatible with asciinema
+### Web Terminal
 
-### Commands & Audit
-- **Global Commands** — define commands shared across all servers, managed in Settings
-- **Command Templates** — use `{{variable}}` or `{{variable:default}}` syntax for parameterized commands
-- **Built-in Variables** — auto-resolve `{{hostname}}`, `{{username}}`, `{{port}}`, `{{date}}`, `{{server_name}}`
-- **Full Audit Trail** — dedicated `/audit` page with Commands and Actions tabs, filtering, search, pagination, CSV export
-- **User Attribution** — every audit entry shows which user performed the action (including terminal connect/disconnect)
-- **Server Attribution** — activity feed and audit entries show which server each action targeted
-- **Command Name Tracking** — audit trail distinguishes between command name (friendly label) and command text (actual shell command)
-- **Destructive Command Protection** — confirms before running commands containing `rm -rf`, `drop`, etc.
+Full xterm.js terminal in the browser — no local SSH client needed.
 
-### Help & Documentation
-- **In-App Guide** — built-in `/guide` page with step-by-step instructions for every feature
-- **Section Icons** — visual section headers with numbered steps, tips, and keyboard shortcuts
-- **Keyboard Shortcut Reference** — quick reference for all terminal and navigation shortcuts
+- Multi-tab sessions (`Ctrl+T` open, `Ctrl+W` close, `Ctrl+1-9` switch)
+- Scrollback search with regex, case sensitivity, and match navigation (`Ctrl+F`)
+- Session recording in asciicast v2 format, with a built-in player (play/pause, 0.5x-4x speed, seek, idle-skip)
+- Copy-on-select and smart `Ctrl+C` (copies when text is selected, sends SIGINT otherwise)
+- Password and SSH private-key authentication
+
+</td>
+</tr>
+</table>
+
+<!-- Broadcast -->
+<table>
+<tr>
+<td width="48%">
+
+### Broadcast
+
+One command, the whole fleet. Pick targets by group and watch every server report back live.
+
+- Target chips grouped by environment, one-click "all PROD"
+- Live per-server cards showing output, exit code, and duration
+- Fleet summary meter: done / failed / running
+- `{{variable}}` template values resolved per server
+
+</td>
+<td width="52%">
+
+<img src="docs/screens/broadcast.png" alt="Broadcast command results" width="100%">
+
+</td>
+</tr>
+</table>
+
+<!-- SFTP File Browser -->
+<table>
+<tr>
+<td width="52%">
+
+<img src="docs/screens/files.png" alt="SFTP file browser" width="100%">
+
+</td>
+<td width="48%">
+
+### SFTP File Browser
+
+Dual-pane file manager over your existing SSH connection, powered by `github.com/pkg/sftp`.
+
+- Drag files from your desktop straight to the server
+- Per-file upload progress, streamed downloads
+- Breadcrumb navigation, permissions at a glance, create directories
+- Every upload, download, and delete is audited
+
+</td>
+</tr>
+</table>
+
+<!-- Quick Commands -->
+<table>
+<tr>
+<td width="48%">
+
+### Quick Commands
+
+Save the commands you run every day — flush cache, restart service, tail logs — and fire them in one click.
+
+- Per-server and global commands with tags
+- `{{variable}}` and `{{variable:default}}` templates
+- Built-in variables auto-resolve: `{{hostname}}`, `{{username}}`, `{{port}}`, `{{date}}`, `{{server_name}}`
+- Re-run from the output modal with a live running indicator
+- Destructive-command confirmation guard (`rm -rf`, `drop`, etc.)
+
+</td>
+<td width="52%">
+
+<img src="docs/screens/commands.png" alt="Command templates" width="100%">
+
+</td>
+</tr>
+</table>
+
+<!-- Real Access Control -->
+<table>
+<tr>
+<td width="52%">
+
+<img src="docs/screens/permissions.png" alt="User permission editor" width="100%">
+
+</td>
+<td width="48%">
+
+### Real Access Control
+
+Per-user permissions enforced by the API, not hidden by the UI.
+
+- 7 permission flags per user plus per-server assignment
+- 4h sliding sessions with server-side revocation on logout and password change
+- Command text redacted from users without audit access
+- Full audit trail: who ran what, on which server, when
+
+</td>
+</tr>
+</table>
+
+<!-- Monitoring & Metrics -->
+<table>
+<tr>
+<td width="48%">
 
 ### Monitoring & Metrics
-- **Server Stats Widgets** — CPU, memory, disk usage, uptime, and load average per server (fetched on select)
-- **Metrics Dashboard** — historical charts for uptime %, connections, command execution rates, and latency
-- **Time Range Selector** — view metrics for last 24h, 7d, or 30d
-- **Background Ping** — configurable interval records uptime and latency to ping_history
-- **CSS/SVG Charts** — lightweight visualization with no external charting libraries
 
-### Admin Tools
-- **Database Browser** — browse all SQLite tables and data from Settings > Database tab (requires View Database permission)
-- **User Management** — create users, assign roles, set permissions, assign servers (superadmin only)
-- **Export / Import** — backup and restore your server configs as JSON
+Know your fleet's state before anyone files a ticket.
 
-### Organization
-- **Themes** — six color themes (dark, midnight, light, nord, dracula, matrix), switchable from Settings → General
-- **Drag & Drop** — reorder servers within groups by dragging
-- **Toast Notifications** — real-time feedback when commands complete
-- **Keyboard Shortcuts** — `Ctrl+K` to focus server search
+- Live CPU / memory / disk / load average widgets per server
+- Uptime %, latency, and activity charts (24h / 7d / 30d)
+- Background ping with a configurable interval, recorded to ping history
+- Lightweight CSS/SVG charts — zero external charting libraries
+
+</td>
+<td width="52%">
+
+<img src="docs/screens/metrics.png" alt="Server metrics" width="100%">
+
+</td>
+</tr>
+</table>
+
+## How it works
+
+One binary. The React UI is embedded in the Go server; everything talks SSH from there.
+
+```mermaid
+flowchart LR
+    A["Browser<br/>React + xterm.js"] -->|HTTP / WS| B["shellhub binary<br/>Go + SQLite + tray"]
+    B -->|SSH / SFTP| C["Your fleet<br/>prod / staging / dev"]
+```
 
 ## Quick Start
 
-### From binary
+Download the build for your platform, then run it:
 
-Just double-click `shellhub.exe` (or run `./shellhub` on Linux/macOS).
+```
+./shellhub          # opens http://localhost:8080
+```
 
 On first launch:
+
 1. A folder picker dialog asks where to store your data
-2. ShellHub binds to **http://localhost:8080** (auto-falls-back to 8081, 8082… if 8080 is busy)
+2. ShellHub binds to **http://localhost:8080** (auto-falls-back to 8081, 8082, ... if 8080 is busy)
 3. Your browser opens automatically to the dashboard
 4. **Sign in with the default superadmin account:**
    - **Username:** `admin`
    - **Password:** `admin123`
-   - ⚠️ Change this immediately from **Settings → Security**
+   - **Change this immediately** from **Settings → Security**
 5. A tray icon appears — right-click for *Open in Browser* / *Stop Server*
 
 Add servers from the browser. Everything is stored in `shellhub.db` in the folder you chose.
@@ -97,20 +205,104 @@ Add servers from the browser. Everything is stored in `shellhub.db` in the folde
 your-chosen-folder/
 └── shellhub.db      ← auto-created, stores all server configs
 
-%APPDATA%/ShellHub/  (Windows) or ~/.config/shellhub/ (Linux/macOS)
+%APPDATA%\ShellHub\  (Windows) or ~/.config/shellhub/ (Linux/macOS)
 └── settings.json    ← remembers your chosen DB location + port
 ```
 
-### Changing the port
+<details>
+<summary><b>macOS</b> — DMG install, Gatekeeper note</summary>
+
+1. Download `ShellHub.dmg` and double-click to mount it.
+2. Drag **ShellHub.app** into your **Applications** folder.
+3. These builds are not code-signed, so Gatekeeper will block the first open. Right-click (or Control-click) **ShellHub.app** and choose **Open**, then confirm **Open** in the dialog. macOS remembers the choice on later launches.
+4. On first run, pick a folder for `shellhub.db` when prompted.
+
+Settings live at `~/.config/shellhub/settings.json` (or `$XDG_CONFIG_HOME/shellhub/settings.json` if that variable is set).
+
+</details>
+
+<details>
+<summary><b>Windows</b> — installer or portable exe</summary>
+
+**Installer:** run `ShellHub-Setup.exe` (NSIS). It installs ShellHub and creates Start Menu and desktop shortcuts.
+
+**Portable:** download `shellhub-windows-amd64.exe` and run it directly — no install needed.
+
+SmartScreen may warn on the unsigned build. Click **More info → Run anyway** to continue. On first run, pick a folder for `shellhub.db` when prompted.
+
+Settings live at `%APPDATA%\ShellHub\settings.json` (typically `C:\Users\<you>\AppData\Roaming\ShellHub\settings.json`).
+
+</details>
+
+<details>
+<summary><b>Linux</b> — deb / rpm / raw binary</summary>
+
+**Debian / Ubuntu:**
+
+```bash
+sudo dpkg -i shellhub_0.2.0_amd64.deb
+shellhub
+```
+
+**Fedora / RHEL / openSUSE:**
+
+```bash
+sudo rpm -i shellhub-0.2.0.x86_64.rpm
+shellhub
+```
+
+**Raw binary:**
+
+```bash
+chmod +x shellhub-linux-amd64
+./shellhub-linux-amd64
+```
+
+The system tray icon uses the standard `libappindicator` / GTK stack. On minimal or headless installs those libraries may be absent — ShellHub still serves the web UI, only the tray icon is skipped. Settings live at `~/.config/shellhub/settings.json` (or `$XDG_CONFIG_HOME/shellhub/settings.json`).
+
+</details>
+
+<details>
+<summary><b>From source</b> — Go 1.22+, Node 18+</summary>
+
+Prerequisites: **Go 1.22+** and **Node 18+**.
+
+```bash
+# Windows (PowerShell)
+cd build
+./build.ps1 build
+
+# Linux / macOS
+cd build
+make build
+```
+
+**Development mode** — run the Go backend and Vite dev server separately for hot reload:
+
+```bash
+# Terminal 1: Go backend (console mode, no tray, no folder picker)
+go run . -dev
+
+# Terminal 2: React frontend (proxies API to :8080)
+cd frontend && npm run dev
+```
+
+Open `http://localhost:5173` for the frontend with hot reload.
+
+</details>
+
+One self-contained binary — frontend embedded, SQLite storage, system tray.
+
+## Changing the port
 
 Pick any of the following — all of them persist for future launches:
 
 ```bash
 # Option 1: pass -port once, it gets saved to settings.json
-shellhub.exe -port 9000
+shellhub -port 9000
 
 # Option 2: edit settings.json directly
-# %APPDATA%/ShellHub/settings.json   (Windows)
+# %APPDATA%\ShellHub\settings.json   (Windows)
 # ~/.config/shellhub/settings.json   (Linux/macOS)
 {
   "db_path": "C:\\Users\\me\\ShellHub\\shellhub.db",
@@ -118,9 +310,9 @@ shellhub.exe -port 9000
 }
 ```
 
-If the chosen port is in use, ShellHub automatically picks the next free port in `[port, port+20]` and saves it. The current URL is shown in the tray tooltip and as a (disabled) menu entry.
+If the chosen port is in use, ShellHub automatically picks the next free port in the range `[port, port+20]` and saves it. The current URL is shown in the tray tooltip and as a disabled menu entry.
 
-### Import from YAML (optional)
+## Import from YAML (optional)
 
 If you have existing server configs, place a `servers.yaml` next to the database before first run:
 
@@ -132,33 +324,41 @@ vim servers.yaml   # fill in your real servers
 
 The YAML is only read once — when the database is empty. After import, all changes go through the web UI into SQLite.
 
-### From source
-
-```bash
-# Prerequisites: Go 1.22+, Node 18+
-
-# Windows (PowerShell)
-cd build
-./build.ps1 build
-
-# Linux / macOS
-cd build
-make build
+```yaml
+servers:
+  - name: "Production AEM"
+    host: "10.0.1.50"
+    port: 22
+    username: "admin"
+    password: "changeme"
+    group: "Production"
+    auth_type: "password"          # or "key" for SSH key auth
+    private_key: ""                # PEM-encoded private key (when auth_type is "key")
+    quick_commands:
+      - name: "Flush Cache"
+        command: "sudo /opt/aem/crx-quickstart/bin/flush-cache.sh"
+        tag: "cache"
+      - name: "Restart Apache"
+        command: "sudo systemctl restart apache2"
+        tag: "service"
 ```
 
-### Development mode
+See `servers.example.yaml` for a full example with multiple servers.
 
-Run the Go backend and Vite dev server separately for hot reload:
+> **Note:** `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
 
-```bash
-# Terminal 1: Go backend (console mode, no tray)
-go run . -dev
+## Themes
 
-# Terminal 2: React frontend (proxies API to :8080)
-cd frontend && npm run dev
-```
+Six color themes, switchable instantly from **Settings → General** (the choice is persisted).
 
-Open `http://localhost:5173` for the frontend with hot reload.
+| Theme | Description |
+|-------|-------------|
+| dark | Default deep-navy dark theme with blue and green accents |
+| midnight | Near-black background with indigo accents for low-light rooms |
+| light | Clean high-contrast light theme for bright environments |
+| nord | Muted arctic blue-grey palette from the Nord scheme |
+| dracula | Warm purple-and-pink dark theme from the Dracula scheme |
+| matrix | High-contrast black-and-green terminal look |
 
 ## User Roles & Permissions
 
@@ -173,11 +373,11 @@ Open `http://localhost:5173` for the frontend with hot reload.
 | View Database | Yes | No |
 | Manage Users | Yes | No |
 
-Superadmin can toggle any permission per user from Settings > Users > Permissions.
+Superadmin can toggle any permission per user from **Settings → Users → Permissions**. The first user is auto-promoted to superadmin with full access.
 
-Permission flags are enforced server-side by API middleware, not just hidden in the UI.
+Permission flags are enforced server-side by API middleware (403 on denial) — metrics, audit, recordings, database browser, command execution, file access, and terminal access are all gated in the API, not just hidden in the UI. Regular users only see servers assigned to them by the superadmin. File-browser access is gated by the Open Terminal permission.
 
-Regular users only see servers assigned to them by the superadmin.
+Sessions are HMAC-SHA256 tokens in httpOnly cookies with 4h sliding expiry (auto-renewed while active, re-login after 4h idle); server-side revocation invalidates sessions on logout and password change.
 
 ## Settings
 
@@ -217,32 +417,7 @@ You can override the DB location with the `-db` flag:
 ./shellhub -db /path/to/my/shellhub.db
 ```
 
-### YAML Import
-
-On startup, if a `servers.yaml` exists next to the database and the database has no servers yet, ShellHub auto-imports from the YAML:
-
-```yaml
-servers:
-  - name: "Production AEM"
-    host: "10.0.1.50"
-    port: 22
-    username: "admin"
-    password: "changeme"
-    group: "Production"
-    auth_type: "password"          # or "key" for SSH key auth
-    private_key: ""                # PEM-encoded private key (when auth_type is "key")
-    quick_commands:
-      - name: "Flush Cache"
-        command: "sudo /opt/aem/crx-quickstart/bin/flush-cache.sh"
-        tag: "cache"
-      - name: "Restart Apache"
-        command: "sudo systemctl restart apache2"
-        tag: "service"
-```
-
-See `servers.example.yaml` for a full example with multiple servers.
-
-> **Note:** `servers.yaml` and `shellhub.db` contain credentials and are gitignored.
+Server passwords and SSH keys are encrypted at rest with AES-256-GCM. Accounts are locked after 5 failed login attempts in 10 minutes (auto-unlock after 30 minutes). All login attempts are logged with IP and user agent.
 
 ## API Endpoints
 
@@ -280,6 +455,15 @@ See `servers.example.yaml` for a full example with multiple servers.
 | GET | `/api/servers/{id}/stats` | Get live server stats |
 | GET | `/api/servers/{id}/history` | Connection history |
 | GET | `/api/servers/{id}/exec-history` | Execution history |
+
+### Files (SFTP)
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/servers/{id}/files` | List directory contents |
+| GET | `/api/servers/{id}/files/download` | Download a file |
+| POST | `/api/servers/{id}/files/upload` | Upload files (multipart) |
+| DELETE | `/api/servers/{id}/files` | Delete a file or directory |
+| POST | `/api/servers/{id}/files/mkdir` | Create a directory |
 
 ### Commands & Audit
 | Method | Path | Description |
@@ -354,10 +538,11 @@ Cross-platform binaries land in `build/dist/`. Each is a self-contained single f
 | `-port` | `8080` | HTTP server port |
 | `-db` | `shellhub.db` | Path to the SQLite database file (overrides saved setting) |
 | `-dev` | `false` | Development mode (console output, no tray, no folder picker) |
+| `-version` | — | Print the ShellHub version and exit |
 
 ## Tech Stack
 
-**Backend:** Go 1.25, net/http, gorilla/websocket, golang.org/x/crypto/ssh, modernc.org/sqlite, getlantern/systray, sqweek/dialog
+**Backend:** Go 1.25, net/http, gorilla/websocket, golang.org/x/crypto/ssh, github.com/pkg/sftp, modernc.org/sqlite, getlantern/systray, sqweek/dialog
 
 **Frontend:** React 19, TypeScript, Vite, Tailwind CSS, xterm.js, @xterm/addon-search, React Router, @dnd-kit
 
@@ -368,7 +553,9 @@ shellhub/
 ├── main.go                 # Entry point, routing, background ping, embedded frontend
 ├── servers.example.yaml    # Example config for YAML import
 ├── assets/
-│   └── shellhub.ico        # Application icon source
+│   ├── shellhub.ico        # Application icon source
+│   ├── banner.svg          # README hero banner
+│   └── demo.svg            # Animated startup demo
 ├── build/
 │   ├── build.ps1           # PowerShell build script (Windows)
 │   ├── Makefile            # Make build script (Linux/macOS)
@@ -376,14 +563,15 @@ shellhub/
 ├── internal/
 │   ├── auth/               # Authentication, RBAC, encryption, permissions
 │   ├── config/             # SQLite store, schema, migrations, CRUD
-│   ├── settings/           # Persisted app settings (DB path)
+│   ├── settings/           # Persisted app settings (DB path, port)
 │   ├── ssh/                # SSH client (password + key auth)
 │   ├── api/                # REST handlers, stats, metrics, DB browser
+│   │   └── sftp.go         # SFTP file browser handlers
 │   ├── terminal/           # WebSocket ↔ SSH bridge with recording
 │   └── tray/               # System tray icon + menu
 └── frontend/
     └── src/
-        ├── pages/          # Dashboard, Terminal, Settings, Login, Audit, Recordings, Metrics
-        ├── components/     # Sidebar, TabBar, TerminalSearch, ServerStatsWidget, etc.
+        ├── pages/          # Dashboard, Terminal, Files, Settings, Login, Audit, Recordings, Metrics
+        ├── components/     # Sidebar, TabBar, TerminalSearch, ServerStatsWidget, BroadcastModal, etc.
         └── lib/            # API client, types, auth context, templates, WebSocket
 ```
