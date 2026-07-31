@@ -3,6 +3,7 @@ package auth
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/sarchitt/shellhub/internal/config"
 )
@@ -271,5 +272,138 @@ func TestEncryptExistingCredentials(t *testing.T) {
 	}
 	if decrypted != "secret" {
 		t.Fatalf("expected 'secret', got %q", decrypted)
+	}
+}
+
+// --- Session hardening ---
+
+func sessionCount(t *testing.T, s *AuthStore, userID int) int {
+	t.Helper()
+	var n int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE user_id = ?`, userID).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func TestSession_LoginCreatesSession(t *testing.T) {
+	s := setupAuthStore(t)
+	user, _ := s.CreateUser("admin", "pass")
+
+	token, err := s.GenerateToken(user)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := sessionCount(t, s, user.ID); n != 1 {
+		t.Fatalf("expected 1 session, got %d", n)
+	}
+	claims, err := s.ValidateToken(token)
+	if err != nil {
+		t.Fatalf("expected valid token, got: %v", err)
+	}
+	if claims.TokenID == "" {
+		t.Fatal("expected non-empty jti in claims")
+	}
+}
+
+func TestSession_LogoutInvalidates(t *testing.T) {
+	s := setupAuthStore(t)
+	user, _ := s.CreateUser("admin", "pass")
+	token, _ := s.GenerateToken(user)
+
+	s.RevokeToken(token)
+
+	if _, err := s.ValidateToken(token); err == nil {
+		t.Fatal("expected revoked token to be rejected")
+	}
+	if n := sessionCount(t, s, user.ID); n != 0 {
+		t.Fatalf("expected 0 sessions after logout, got %d", n)
+	}
+}
+
+func TestSession_ExpiredSessionRejected(t *testing.T) {
+	s := setupAuthStore(t)
+	user, _ := s.CreateUser("admin", "pass")
+	token, _ := s.GenerateToken(user)
+
+	claims, _ := s.parseClaims(token)
+	// Force the server-side session to be expired (token signature still valid).
+	if _, err := s.db.Exec(`UPDATE sessions SET expires_at = ? WHERE id = ?`,
+		time.Now().Add(-time.Minute).Unix(), claims.TokenID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := s.ValidateToken(token); err == nil {
+		t.Fatal("expected expired session to be rejected")
+	}
+}
+
+func TestSession_TokenWithoutJTIRejected(t *testing.T) {
+	s := setupAuthStore(t)
+	// A legacy-style token with no jti must fail closed.
+	legacy := s.signToken(TokenClaims{UserID: 1, Username: "old", Exp: time.Now().Add(time.Hour).Unix()})
+	if _, err := s.ValidateToken(legacy); err == nil {
+		t.Fatal("expected token without session to be rejected")
+	}
+}
+
+func TestSession_RefreshExtends(t *testing.T) {
+	s := setupAuthStore(t)
+	user, _ := s.CreateUser("admin", "pass")
+	token, _ := s.GenerateToken(user)
+	claims, _ := s.ValidateToken(token)
+
+	// Fresh token: not past half-life yet, no refresh.
+	if s.RefreshIfNeeded(claims) != "" {
+		t.Fatal("did not expect refresh for a fresh token")
+	}
+
+	// Simulate a token near expiry (past half-life).
+	near := *claims
+	near.Exp = time.Now().Add(time.Minute).Unix()
+	newToken := s.RefreshIfNeeded(&near)
+	if newToken == "" {
+		t.Fatal("expected refreshed token past half-life")
+	}
+	refreshed, err := s.ValidateToken(newToken)
+	if err != nil {
+		t.Fatalf("refreshed token should validate: %v", err)
+	}
+	if refreshed.Exp <= near.Exp {
+		t.Fatal("expected refreshed token to have a later expiry")
+	}
+	// Same session row, still exactly one session.
+	if n := sessionCount(t, s, user.ID); n != 1 {
+		t.Fatalf("expected refresh to reuse the session, got %d rows", n)
+	}
+}
+
+func TestSession_RevokeUserSessionsKeepsCurrent(t *testing.T) {
+	s := setupAuthStore(t)
+	user, _ := s.CreateUser("admin", "pass")
+	keep, _ := s.GenerateToken(user)
+	other, _ := s.GenerateToken(user)
+
+	keepClaims, _ := s.parseClaims(keep)
+	s.RevokeUserSessions(user.ID, keepClaims.TokenID)
+
+	if _, err := s.ValidateToken(keep); err != nil {
+		t.Fatalf("current session should survive password change: %v", err)
+	}
+	if _, err := s.ValidateToken(other); err == nil {
+		t.Fatal("other sessions should be revoked on password change")
+	}
+}
+
+func TestSession_DeleteUserRevokesSessions(t *testing.T) {
+	s := setupAuthStore(t)
+	user, _ := s.CreateUser("victim", "pass")
+	token, _ := s.GenerateToken(user)
+
+	if err := s.DeleteUser(user.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ValidateToken(token); err == nil {
+		t.Fatal("expected deleted user's session to be revoked")
 	}
 }

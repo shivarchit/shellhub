@@ -501,6 +501,8 @@ type ExecRecord struct {
 	DurationMs  int    `json:"duration_ms"`
 	UserID      int    `json:"user_id"`
 	Username    string `json:"username"`
+
+	CommandHidden bool `json:"command_hidden,omitempty"` // set when CommandText is redacted for the viewer
 }
 
 func (s *Store) LogExec(rec ExecRecord) error {
@@ -535,13 +537,16 @@ func (s *Store) GetExecHistory(serverID, limit int) ([]ExecRecord, error) {
 
 // GetAllExecHistory returns paginated exec history across all servers with filtering
 type ExecHistoryFilter struct {
-	ServerID   *int
-	Search     string
-	ExitCode   *int
-	DateFrom   string
-	DateTo     string
-	Limit      int
-	Offset     int
+	ServerID *int
+	Search   string
+	// SearchNameOnly restricts Search to command_name, so viewers without
+	// audit permission cannot probe redacted command text via search.
+	SearchNameOnly bool
+	ExitCode       *int
+	DateFrom       string
+	DateTo         string
+	Limit          int
+	Offset         int
 }
 
 type ExecHistoryPage struct {
@@ -558,9 +563,14 @@ func (s *Store) GetAllExecHistory(filter ExecHistoryFilter) (*ExecHistoryPage, e
 		args = append(args, *filter.ServerID)
 	}
 	if filter.Search != "" {
-		where += " AND (command_name LIKE ? OR command_text LIKE ?)"
 		like := "%" + filter.Search + "%"
-		args = append(args, like, like)
+		if filter.SearchNameOnly {
+			where += " AND command_name LIKE ?"
+			args = append(args, like)
+		} else {
+			where += " AND (command_name LIKE ? OR command_text LIKE ?)"
+			args = append(args, like, like)
+		}
 	}
 	if filter.ExitCode != nil {
 		if *filter.ExitCode == 0 {

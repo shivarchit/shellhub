@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -117,6 +118,19 @@ func NewAuthStore(db *sql.DB) (*AuthStore, error) {
 	`); err != nil {
 		return nil, fmt.Errorf("create login_attempts table: %w", err)
 	}
+
+	// Create sessions table for server-side token revocation
+	if _, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			user_id INTEGER NOT NULL,
+			created_at TEXT NOT NULL DEFAULT (datetime('now')),
+			expires_at INTEGER NOT NULL
+		)
+	`); err != nil {
+		return nil, fmt.Errorf("create sessions table: %w", err)
+	}
+	s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`)
 
 	// Add columns (harmlessly errors if already exists)
 	s.db.Exec(`ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'`)
@@ -324,46 +338,74 @@ func (s *AuthStore) GetLoginAttempts(limit, offset int) ([]LoginAttempt, error) 
 
 // --- Token management ---
 
+// SessionDuration is the base token lifetime. Active users get a fresh token
+// once past half this window (sliding refresh); idle beyond it means re-login.
+const SessionDuration = 4 * time.Hour
+
 type TokenClaims struct {
 	UserID   int    `json:"uid"`
 	Username string `json:"sub"`
 	Role     string `json:"role"`
+	TokenID  string `json:"jti"`
 	Exp      int64  `json:"exp"`
 }
 
-// GenerateToken creates a signed token valid for 24 hours.
+func newTokenID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// signToken produces the signed token string for the given claims.
+func (s *AuthStore) signToken(claims TokenClaims) string {
+	payload, _ := json.Marshal(claims)
+	encoded := base64.RawURLEncoding.EncodeToString(payload)
+	mac := hmacSHA256(s.jwtSecret, []byte(encoded))
+	sig := base64.RawURLEncoding.EncodeToString(mac)
+	return encoded + "." + sig
+}
+
+// GenerateToken creates a new session and returns a signed token for it.
 func (s *AuthStore) GenerateToken(user *User) (string, error) {
-	claims := TokenClaims{
+	jti, err := newTokenID()
+	if err != nil {
+		return "", err
+	}
+	exp := time.Now().Add(SessionDuration).Unix()
+	if _, err := s.db.Exec(
+		`INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`,
+		jti, user.ID, exp,
+	); err != nil {
+		return "", err
+	}
+	// Opportunistic cleanup of expired sessions (no background goroutine needed).
+	s.db.Exec(`DELETE FROM sessions WHERE expires_at < ?`, time.Now().Unix())
+
+	return s.signToken(TokenClaims{
 		UserID:   user.ID,
 		Username: user.Username,
 		Role:     user.Role,
-		Exp:      time.Now().Add(24 * time.Hour).Unix(),
-	}
-	payload, _ := json.Marshal(claims)
-	encoded := base64.RawURLEncoding.EncodeToString(payload)
-
-	// HMAC-SHA256 signature
-	mac := hmacSHA256(s.jwtSecret, []byte(encoded))
-	sig := base64.RawURLEncoding.EncodeToString(mac)
-
-	return encoded + "." + sig, nil
+		TokenID:  jti,
+		Exp:      exp,
+	}), nil
 }
 
-// ValidateToken verifies and decodes a token.
-func (s *AuthStore) ValidateToken(token string) (*TokenClaims, error) {
+// parseClaims verifies the signature and decodes the payload without checking
+// expiry or the session store. Used where only the identity/jti is needed.
+func (s *AuthStore) parseClaims(token string) (*TokenClaims, error) {
 	parts := strings.SplitN(token, ".", 2)
 	if len(parts) != 2 {
 		return nil, errors.New("invalid token format")
 	}
 
-	// Verify signature
 	expectedMAC := hmacSHA256(s.jwtSecret, []byte(parts[0]))
 	expectedSig := base64.RawURLEncoding.EncodeToString(expectedMAC)
 	if parts[1] != expectedSig {
 		return nil, errors.New("invalid token signature")
 	}
 
-	// Decode payload
 	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
 		return nil, errors.New("invalid token encoding")
@@ -373,12 +415,77 @@ func (s *AuthStore) ValidateToken(token string) (*TokenClaims, error) {
 	if err := json.Unmarshal(payload, &claims); err != nil {
 		return nil, errors.New("invalid token payload")
 	}
+	return &claims, nil
+}
+
+// ValidateToken verifies signature, expiry, and that a live session row exists.
+// Fails closed: any missing/revoked session is rejected.
+func (s *AuthStore) ValidateToken(token string) (*TokenClaims, error) {
+	claims, err := s.parseClaims(token)
+	if err != nil {
+		return nil, err
+	}
 
 	if time.Now().Unix() > claims.Exp {
 		return nil, errors.New("token expired")
 	}
 
-	return &claims, nil
+	// Server-side revocation: the session must still exist and be unexpired.
+	if claims.TokenID == "" {
+		return nil, errors.New("session revoked")
+	}
+	var expiresAt int64
+	err = s.db.QueryRow(`SELECT expires_at FROM sessions WHERE id = ?`, claims.TokenID).Scan(&expiresAt)
+	if err != nil {
+		return nil, errors.New("session revoked")
+	}
+	if time.Now().Unix() > expiresAt {
+		return nil, errors.New("session expired")
+	}
+
+	return claims, nil
+}
+
+// RefreshIfNeeded issues a fresh token (extending the same session) when the
+// current one is past its half-life. Returns "" if no refresh is due.
+func (s *AuthStore) RefreshIfNeeded(claims *TokenClaims) string {
+	if claims.TokenID == "" {
+		return ""
+	}
+	halfLife := claims.Exp - int64(SessionDuration.Seconds())/2
+	if time.Now().Unix() < halfLife {
+		return ""
+	}
+	newExp := time.Now().Add(SessionDuration).Unix()
+	res, err := s.db.Exec(`UPDATE sessions SET expires_at = ? WHERE id = ?`, newExp, claims.TokenID)
+	if err != nil {
+		return ""
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ""
+	}
+	refreshed := *claims
+	refreshed.Exp = newExp
+	return s.signToken(refreshed)
+}
+
+// RevokeToken deletes the session backing the given token (used on logout).
+func (s *AuthStore) RevokeToken(token string) {
+	claims, err := s.parseClaims(token)
+	if err != nil || claims.TokenID == "" {
+		return
+	}
+	s.db.Exec(`DELETE FROM sessions WHERE id = ?`, claims.TokenID)
+}
+
+// RevokeUserSessions deletes all sessions for a user, optionally keeping one
+// (e.g. the caller's own session on a self-service password change).
+func (s *AuthStore) RevokeUserSessions(userID int, keepSessionID string) {
+	if keepSessionID != "" {
+		s.db.Exec(`DELETE FROM sessions WHERE user_id = ? AND id != ?`, userID, keepSessionID)
+		return
+	}
+	s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID)
 }
 
 func hmacSHA256(key, data []byte) []byte {
@@ -501,6 +608,8 @@ func (s *AuthStore) DeleteUser(id int) error {
 	if n == 0 {
 		return ErrUserNotFound
 	}
+	// Revoke any active sessions belonging to the deleted user.
+	s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, id)
 	return nil
 }
 
@@ -785,9 +894,23 @@ func (s *AuthStore) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// Sliding refresh: hand back a fresh cookie once past half-life so
+		// active users are never abruptly logged out.
+		if newToken := s.RefreshIfNeeded(claims); newToken != "" {
+			http.SetCookie(w, &http.Cookie{
+				Name:     "shellhub_token",
+				Value:    newToken,
+				Path:     "/",
+				HttpOnly: true,
+				SameSite: http.SameSiteStrictMode,
+				MaxAge:   int(SessionDuration.Seconds()),
+			})
+		}
+
 		// Store claims in request context via header (simple approach)
 		r.Header.Set("X-User-ID", fmt.Sprintf("%d", claims.UserID))
 		r.Header.Set("X-Username", claims.Username)
+		r.Header.Set("X-Session-ID", claims.TokenID)
 		// Backward compatibility: empty role in old tokens treated as "user"
 		role := claims.Role
 		if role == "" {

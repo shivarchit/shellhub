@@ -39,6 +39,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("DELETE /api/servers/{id}", h.deleteServer)
 	mux.HandleFunc("POST /api/servers/{id}/ping", h.pingServer)
 	mux.HandleFunc("POST /api/servers/{id}/exec", h.requirePerm(h.execCommand, func(p auth.UserPermissions) bool { return p.CanExecCommands }))
+	fileAccess := func(p auth.UserPermissions) bool { return p.CanOpenTerminal }
+	mux.HandleFunc("GET /api/servers/{id}/files", h.requirePerm(h.listFiles, fileAccess))
+	mux.HandleFunc("GET /api/servers/{id}/files/download", h.requirePerm(h.downloadFile, fileAccess))
+	mux.HandleFunc("POST /api/servers/{id}/files/upload", h.requirePerm(h.uploadFiles, fileAccess))
+	mux.HandleFunc("DELETE /api/servers/{id}/files", h.requirePerm(h.deleteFile, fileAccess))
+	mux.HandleFunc("POST /api/servers/{id}/files/mkdir", h.requirePerm(h.mkdirFile, fileAccess))
 	mux.HandleFunc("POST /api/ping", h.pingHost)
 	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
 	mux.HandleFunc("GET /api/servers/{id}/exec-history", h.getExecHistory)
@@ -78,6 +84,33 @@ func (h *Handler) requirePerm(next http.HandlerFunc, check func(auth.UserPermiss
 			return
 		}
 		next(w, r)
+	}
+}
+
+// canViewAudit reports whether the requester may see raw command text. Setup
+// mode (unauthenticated) and superadmins always may; otherwise it checks the
+// CanViewAudit permission, failing closed on any lookup error.
+func (h *Handler) canViewAudit(r *http.Request) bool {
+	userID, _ := getUserFromRequest(r)
+	if userID == 0 || isSuperAdmin(r) {
+		return true
+	}
+	user, err := h.authStore.GetUser(userID)
+	if err != nil {
+		return false
+	}
+	return user.Permissions.CanViewAudit
+}
+
+// redactExec blanks raw command text (keeping command_name) for viewers without
+// audit permission, marking each record so the UI can show a redaction bar.
+func redactExec(records []config.ExecRecord, canView bool) {
+	if canView {
+		return
+	}
+	for i := range records {
+		records[i].CommandText = ""
+		records[i].CommandHidden = true
 	}
 }
 
@@ -452,6 +485,7 @@ func (h *Handler) getExecHistory(w http.ResponseWriter, r *http.Request) {
 	if records == nil {
 		records = []config.ExecRecord{}
 	}
+	redactExec(records, h.canViewAudit(r))
 	writeJSON(w, 200, records)
 }
 
@@ -550,9 +584,11 @@ func (h *Handler) deleteGlobalCommand(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) getAllExecHistory(w http.ResponseWriter, r *http.Request) {
+	canView := h.canViewAudit(r)
 	filter := config.ExecHistoryFilter{
-		Limit:  50,
-		Offset: 0,
+		Limit:          50,
+		Offset:         0,
+		SearchNameOnly: !canView,
 	}
 	if l := r.URL.Query().Get("limit"); l != "" {
 		if v, err := strconv.Atoi(l); err == nil {
@@ -589,13 +625,16 @@ func (h *Handler) getAllExecHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	redactExec(page.Records, canView)
 	writeJSON(w, 200, page)
 }
 
 func (h *Handler) exportExecHistory(w http.ResponseWriter, r *http.Request) {
+	canView := h.canViewAudit(r)
 	filter := config.ExecHistoryFilter{
-		Limit:  100000,
-		Offset: 0,
+		Limit:          100000,
+		Offset:         0,
+		SearchNameOnly: !canView,
 	}
 	if sid := r.URL.Query().Get("server_id"); sid != "" {
 		if v, err := strconv.Atoi(sid); err == nil {
@@ -622,6 +661,7 @@ func (h *Handler) exportExecHistory(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	redactExec(page.Records, canView)
 
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", `attachment; filename="shellhub-audit.csv"`)

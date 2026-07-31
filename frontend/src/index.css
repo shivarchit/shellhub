@@ -180,3 +180,19 @@
 }
 .animate-toast-in { animation: toast-in 0.3s ease-out; }
 .animate-toast-out { animation: toast-out 0.3s ease-in forwards; }
+
+/* Redacted command text: striped bar with a traveling shimmer */
+@keyframes shimmer { to { transform: translateX(100%); } }
+.redact-bar {
+  position: relative;
+  overflow: hidden;
+  background: repeating-linear-gradient(105deg, rgb(var(--sh-surface-600)) 0 8px, rgb(var(--sh-surface-500)) 8px 14px);
+}
+.redact-bar::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgb(var(--sh-text-secondary) / 0.16), transparent);
+  transform: translateX(-100%);
+  animation: shimmer 2.4s infinite;
+}

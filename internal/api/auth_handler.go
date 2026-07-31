@@ -111,7 +111,7 @@ func (h *AuthHandler) register(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   86400, // 24 hours
+		MaxAge:   14400, // 4 hours (sliding refresh renews this)
 	})
 
 	h.authStore.LogLoginAttempt(body.Username, true, auth.GetClientIP(r), r.UserAgent())
@@ -172,7 +172,7 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		MaxAge:   86400,
+		MaxAge:   14400, // 4 hours (sliding refresh renews this)
 	})
 
 	h.authStore.LogLoginAttempt(body.Username, true, ip, ua)
@@ -183,8 +183,11 @@ func (h *AuthHandler) login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// logout clears the session cookie.
+// logout revokes the server-side session and clears the cookie.
 func (h *AuthHandler) logout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie("shellhub_token"); err == nil {
+		h.authStore.RevokeToken(cookie.Value)
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "shellhub_token",
 		Value:    "",
@@ -272,6 +275,8 @@ func (h *AuthHandler) changePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 500, err.Error())
 		return
 	}
+	// Invalidate every other session for this user; keep the current one.
+	h.authStore.RevokeUserSessions(id, r.Header.Get("X-Session-ID"))
 	writeJSON(w, 200, map[string]string{"status": "password changed"})
 }
 

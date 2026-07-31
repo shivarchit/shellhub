@@ -224,7 +224,10 @@ export default function Audit() {
               <div key={rec.id}>
                 <div
                   onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
-                  className="grid grid-cols-[100px_1fr_150px_2fr_80px_80px_120px] gap-3 px-4 py-2.5 bg-surface-800 rounded-lg text-xs cursor-pointer hover:bg-surface-700 transition-colors items-center"
+                  className={cn(
+                    'grid grid-cols-[100px_1fr_150px_2fr_80px_80px_120px] gap-3 px-4 py-2.5 bg-surface-800 rounded-lg text-xs cursor-pointer hover:bg-surface-700 transition-colors items-center border-l-2',
+                    rec.exit_code === 0 ? 'border-accent-green' : 'border-accent-red'
+                  )}
                 >
                   <span className="text-accent-blue font-medium truncate">
                     {rec.username || '-'}
@@ -235,9 +238,20 @@ export default function Audit() {
                   <span className="text-text-secondary truncate">
                     {rec.command_name}
                   </span>
-                  <span className="text-text-muted font-mono truncate">
-                    {rec.command_text}
-                  </span>
+                  {rec.command_hidden ? (
+                    <span className="flex items-center gap-2 text-text-muted">
+                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                        <rect x="3" y="7" width="10" height="6" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                        <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                      </svg>
+                      <span className="redact-bar h-2 w-28 rounded" />
+                      <span className="text-[10px] uppercase tracking-wide">hidden</span>
+                    </span>
+                  ) : (
+                    <span className="text-text-muted font-mono truncate">
+                      {rec.command_text}
+                    </span>
+                  )}
                   <span className={cn(
                     'font-medium',
                     rec.exit_code === 0 ? 'text-accent-green' : 'text-accent-red'
