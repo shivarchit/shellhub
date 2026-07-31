@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording, ServerStats, MetricsResponse } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording, ServerStats, MetricsResponse, FileEntry } from './types'
 
 const BASE = '/api'
 
@@ -160,6 +160,48 @@ export const getUserServers = (id: number) =>
 
 export const updateUserServers = (id: number, serverIds: number[]) =>
   request<void>(`/users/${id}/servers`, { method: 'PUT', body: JSON.stringify({ server_ids: serverIds }) })
+
+// SFTP file browser
+export const listFiles = (id: number, path: string) =>
+  request<FileEntry[]>(`/servers/${id}/files?path=${encodeURIComponent(path)}`)
+
+export const downloadFileUrl = (id: number, path: string) =>
+  `/api/servers/${id}/files/download?path=${encodeURIComponent(path)}`
+
+export const deleteFile = (id: number, path: string) =>
+  request<void>(`/servers/${id}/files?path=${encodeURIComponent(path)}`, { method: 'DELETE' })
+
+export const mkdir = (id: number, path: string) =>
+  request<void>(`/servers/${id}/files/mkdir?path=${encodeURIComponent(path)}`, { method: 'POST' })
+
+// Uploads use XHR directly so callers get per-file progress events.
+export function uploadFiles(
+  id: number,
+  dir: string,
+  files: File[],
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData()
+    for (const f of files) form.append('files', f, f.name)
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `/api/servers/${id}/files/upload?path=${encodeURIComponent(dir)}`)
+    xhr.withCredentials = true
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded, e.total) }
+    }
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) resolve()
+      else {
+        let msg = `HTTP ${xhr.status}`
+        try { msg = JSON.parse(xhr.responseText).error || msg } catch { /* ignore */ }
+        reject(new Error(msg))
+      }
+    }
+    xhr.onerror = () => reject(new Error('Upload failed'))
+    xhr.send(form)
+  })
+}
 
 export interface UserPermissionsPayload {
   can_view_recordings: boolean

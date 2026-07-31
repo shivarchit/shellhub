@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 import type { Server, ExecResult, QuickCommand, ConnectionRecord, ExecRecord, GlobalCommand } from '../lib/types'
 import { getConnectionHistory, getExecHistory, getGlobalCommands } from '../lib/api'
 import { cn } from '../lib/utils'
@@ -38,6 +39,7 @@ export default function ServerDetail({
   const [lastConnected, setLastConnected] = useState<ConnectionRecord | null>(null)
   const [execHistory, setExecHistory] = useState<ExecRecord[]>([])
   const [globalCommands, setGlobalCommands] = useState<GlobalCommand[]>([])
+  const navigate = useNavigate()
 
   useEffect(() => {
     getConnectionHistory(server.id)
@@ -91,6 +93,12 @@ export default function ServerDetail({
             className="px-4 py-2 text-sm font-medium text-white bg-accent-blue rounded-lg hover:opacity-90 transition-opacity shadow-glow-blue"
           >
             Open Terminal
+          </button>
+          <button
+            onClick={() => navigate(`/files/${server.id}`)}
+            className="px-4 py-2 text-sm font-medium text-text-secondary bg-surface-700 border border-border rounded-lg hover:bg-surface-600 transition-colors"
+          >
+            Files
           </button>
           <button
             onClick={onEdit}

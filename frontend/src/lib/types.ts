@@ -64,6 +64,7 @@ export interface ExecRecord {
   duration_ms: number
   user_id?: number
   username?: string
+  command_hidden?: boolean
 }
 
 export interface ExecHistoryPage {
@@ -174,4 +175,12 @@ export interface MetricsResponse {
   executions: DailyExecCount[]
   top_servers: ServerActivity[]
   latencies: Record<string, LatencyPoint[]>
+}
+
+export interface FileEntry {
+  name: string
+  size: number
+  mode: string
+  is_dir: boolean
+  mod_time: string
 }

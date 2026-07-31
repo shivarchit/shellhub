@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import Dashboard from './pages/Dashboard'
 import Terminal from './pages/Terminal'
+import Files from './pages/Files'
 import Settings from './pages/Settings'
 import Login from './pages/Login'
 import Audit from './pages/Audit'
@@ -44,6 +45,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/terminal/:id" element={<ProtectedRoute><RequirePermission permission="can_open_terminal"><Terminal /></RequirePermission></ProtectedRoute>} />
+      <Route path="/files/:id" element={<ProtectedRoute><RequirePermission permission="can_open_terminal"><Files /></RequirePermission></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
       <Route path="/audit" element={<ProtectedRoute><RequirePermission permission="can_view_audit"><Audit /></RequirePermission></ProtectedRoute>} />
       <Route path="/recordings" element={<ProtectedRoute><RequirePermission permission="can_view_recordings"><Recordings /></RequirePermission></ProtectedRoute>} />
