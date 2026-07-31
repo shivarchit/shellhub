@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/sarchitt/shellhub/internal/auth"
-	"github.com/sarchitt/shellhub/internal/config"
-	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
+	"github.com/shivarchit/shellhub/internal/auth"
+	"github.com/shivarchit/shellhub/internal/config"
+	sshpkg "github.com/shivarchit/shellhub/internal/ssh"
 )
 
 var upgrader = websocket.Upgrader{

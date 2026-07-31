@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sarchitt/shellhub/internal/config"
+	"github.com/shivarchit/shellhub/internal/config"
 )
 
 // MetricsSummary is the top-level summary returned by the metrics endpoint.

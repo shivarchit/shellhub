@@ -5,7 +5,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/sarchitt/shellhub/internal/config"
+	"github.com/shivarchit/shellhub/internal/config"
 	gossh "golang.org/x/crypto/ssh"
 )
 

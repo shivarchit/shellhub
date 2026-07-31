@@ -15,13 +15,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sarchitt/shellhub/internal/api"
-	"github.com/sarchitt/shellhub/internal/auth"
-	"github.com/sarchitt/shellhub/internal/config"
-	"github.com/sarchitt/shellhub/internal/settings"
-	sshpkg "github.com/sarchitt/shellhub/internal/ssh"
-	"github.com/sarchitt/shellhub/internal/terminal"
-	"github.com/sarchitt/shellhub/internal/tray"
+	"github.com/shivarchit/shellhub/internal/api"
+	"github.com/shivarchit/shellhub/internal/auth"
+	"github.com/shivarchit/shellhub/internal/config"
+	"github.com/shivarchit/shellhub/internal/settings"
+	sshpkg "github.com/shivarchit/shellhub/internal/ssh"
+	"github.com/shivarchit/shellhub/internal/terminal"
+	"github.com/shivarchit/shellhub/internal/tray"
 )
 
 //go:embed all:frontend/dist

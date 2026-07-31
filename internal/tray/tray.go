@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/getlantern/systray"
-	"github.com/sarchitt/shellhub/internal/settings"
+	"github.com/shivarchit/shellhub/internal/settings"
 	"github.com/sqweek/dialog"
 )
 

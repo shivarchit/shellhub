@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sarchitt/shellhub/internal/config"
+	"github.com/shivarchit/shellhub/internal/config"
 )
 
 func setupAuthStore(t *testing.T) *AuthStore {

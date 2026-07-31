@@ -12,8 +12,8 @@ import (
 
 	"github.com/pkg/sftp"
 
-	"github.com/sarchitt/shellhub/internal/config"
-	"github.com/sarchitt/shellhub/internal/ssh"
+	"github.com/shivarchit/shellhub/internal/config"
+	"github.com/shivarchit/shellhub/internal/ssh"
 )
 
 // FileEntry is one directory entry returned by the file listing endpoint.

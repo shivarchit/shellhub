@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sarchitt/shellhub/internal/auth"
-	"github.com/sarchitt/shellhub/internal/config"
+	"github.com/shivarchit/shellhub/internal/auth"
+	"github.com/shivarchit/shellhub/internal/config"
 )
 
 type Pinger interface {

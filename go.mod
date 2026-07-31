@@ -1,4 +1,4 @@
-module github.com/sarchitt/shellhub
+module github.com/shivarchit/shellhub
 
 go 1.25.0
 
