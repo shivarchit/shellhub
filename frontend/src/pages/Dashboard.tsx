@@ -15,6 +15,8 @@ import ServerDetail from '../components/ServerDetail'
 import AddEditServerModal from '../components/AddEditServerModal'
 import ExecModal from '../components/ExecModal'
 import ActivityFeed from '../components/ActivityFeed'
+import BroadcastModal from '../components/BroadcastModal'
+import { useAuth } from '../lib/auth'
 
 interface ExecState {
   result: ExecResult
@@ -24,7 +26,9 @@ interface ExecState {
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [servers, setServers] = useState<Server[]>([])
+  const [showBroadcast, setShowBroadcast] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [onlineMap, setOnlineMap] = useState<Record<number, boolean>>({})
   const [showAddModal, setShowAddModal] = useState(false)
@@ -50,8 +54,8 @@ export default function Dashboard() {
   const fetchServers = useCallback(async () => {
     const list = await getServers()
     setServers(list)
-    await pingAll(list)
     setLoading(false)
+    await pingAll(list)
   }, [pingAll])
 
   useEffect(() => {
@@ -176,8 +180,24 @@ export default function Dashboard() {
     }
   }
 
+  const canBroadcast = user?.permissions?.can_exec_commands && servers.length > 0
+
   return (
     <div className="flex h-screen bg-surface-900 font-sans">
+      {canBroadcast && !selectedServer && (
+        <button
+          onClick={() => setShowBroadcast(true)}
+          className="fixed top-4 right-5 z-40 flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-text-secondary bg-surface-800 border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors shadow-lg"
+          title="Broadcast a command to multiple servers"
+        >
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+            <path d="M4.5 4.5a5 5 0 000 7M11.5 4.5a5 5 0 010 7M2.5 2.5a8 8 0 000 11M13.5 2.5a8 8 0 010 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+          Broadcast
+        </button>
+      )}
+
       <Sidebar
         servers={servers}
         selectedId={selectedId}
@@ -243,6 +263,11 @@ export default function Dashboard() {
             setDuplicateData(null)
           }}
         />
+      )}
+
+      {/* Broadcast Modal */}
+      {showBroadcast && (
+        <BroadcastModal servers={servers} onClose={() => setShowBroadcast(false)} />
       )}
 
       {/* Exec Result Modal */}
