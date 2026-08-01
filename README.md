@@ -25,7 +25,7 @@ A lightweight web-based SSH client and server management tool. Connect to your s
 
 <img src="docs/screens/dashboard.png" alt="Server dashboard" width="100%">
 
-Server dashboard with live status, quick commands, and activity feed.
+Server dashboard with per-group fleet health, live status, quick commands, and activity feed. Pin favorite servers to the top of the sidebar and switch between comfortable and compact list density.
 
 ## Features
 
@@ -47,7 +47,7 @@ Full xterm.js terminal in the browser — no local SSH client needed.
 - Scrollback search with regex, case sensitivity, and match navigation (`Ctrl+F`)
 - Session recording in asciicast v2 format, with a built-in player (play/pause, 0.5x-4x speed, seek, idle-skip)
 - Copy-on-select and smart `Ctrl+C` (copies when text is selected, sends SIGINT otherwise)
-- Password and SSH private-key authentication
+- Password and SSH private-key authentication — load a `.pem` file straight from disk, encrypted keys unlocked with a passphrase
 
 </td>
 </tr>
@@ -156,6 +156,7 @@ Per-user permissions enforced by the API, not hidden by the UI.
 Know your fleet's state before anyone files a ticket.
 
 - Live CPU / memory / disk / load average widgets per server
+- Fleet health cards per server group on the dashboard
 - Uptime %, latency, and activity charts (24h / 7d / 30d)
 - Background ping with a configurable interval, recorded to ping history
 - Lightweight CSS/SVG charts — zero external charting libraries
@@ -192,6 +193,8 @@ curl -fsSL https://raw.githubusercontent.com/shivarchit/shellhub/main/install.sh
 # Windows (PowerShell)
 irm https://raw.githubusercontent.com/shivarchit/shellhub/main/install.ps1 | iex
 ```
+
+On macOS this installs both the `shellhub` CLI and the double-clickable **ShellHub.app** in Applications, ready to launch from Spotlight.
 
 Or manually:
 

@@ -41,7 +41,9 @@ curl -fsSL https://raw.githubusercontent.com/shivarchit/shellhub/main/install.sh
 irm https://raw.githubusercontent.com/shivarchit/shellhub/main/install.ps1 | iex
 ```
 
-Both scripts honor two environment variables: `SHELLHUB_VERSION` pins a specific release (for example `v0.1.0`), and `SHELLHUB_INSTALL_DIR` overrides the install location. The shell script installs to `/usr/local/bin` when writable, otherwise `~/.local/bin`; the PowerShell script installs to `%LOCALAPPDATA%\ShellHub` and adds it to your user PATH. Prefer a packaged installer? Use the per-platform steps below.
+On macOS the script installs two things: the `shellhub` CLI binary on your PATH, and the double-clickable **ShellHub.app** in `/Applications` (or `~/Applications` when `/Applications` is not writable) with the Gatekeeper quarantine flag already cleared. Launch it from Spotlight like any other app. Set `SHELLHUB_CLI=1` to skip the app and install only the binary.
+
+Both scripts honor these environment variables: `SHELLHUB_VERSION` pins a specific release (for example `v0.2.1`), `SHELLHUB_INSTALL_DIR` overrides the binary location, and `SHELLHUB_APP_DIR` overrides the macOS app location. The shell script installs the binary to `/usr/local/bin` when writable, otherwise `~/.local/bin`; the PowerShell script installs to `%LOCALAPPDATA%\ShellHub` and adds it to your user PATH. Prefer a packaged installer? Use the per-platform steps below.
 
 ### macOS
 
@@ -156,6 +158,8 @@ servers:
     group: "Production"
     auth_type: "password"          # or "key" for SSH key auth
     private_key: ""                # PEM-encoded private key (when auth_type is "key")
+    # With auth_type "key", the password field is optional: it unlocks an
+    # encrypted (passphrase-protected) key and doubles as password-auth fallback.
     quick_commands:
       - name: "Flush Cache"
         command: "sudo /opt/aem/crx-quickstart/bin/flush-cache.sh"
