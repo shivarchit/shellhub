@@ -90,10 +90,11 @@ One command, the whole fleet. Pick targets by group and watch every server repor
 
 Dual-pane file manager over your existing SSH connection, powered by `github.com/pkg/sftp`.
 
+- Real local file browser side by side with the server (superadmin) — drag a file either direction and it streams straight to the folder you are looking at, no browser downloads
+- Live per-transfer progress with byte counts
 - Drag files from your desktop straight to the server
-- Per-file upload progress, streamed downloads
 - Breadcrumb navigation, permissions at a glance, create directories
-- Every upload, download, and delete is audited
+- Every transfer and delete is audited, broadcast runs tagged in the audit trail
 
 </td>
 </tr>

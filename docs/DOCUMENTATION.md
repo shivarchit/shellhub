@@ -305,6 +305,16 @@ Every route below is relative to the server address, for example `http://localho
 | DELETE | `/api/servers/{id}/files` | Delete a file or directory |
 | POST | `/api/servers/{id}/files/mkdir` | Create a directory |
 
+The SFTP page also offers a local file browser with server-side transfers. These routes touch the host machine's filesystem, so they are superadmin-only:
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/localfs` | List a local directory (defaults to home) |
+| POST | `/api/localfs/mkdir` | Create a local directory |
+| POST | `/api/servers/{id}/files/pull` | Copy a remote file to a local directory (streamed server-side) |
+| POST | `/api/servers/{id}/files/push` | Copy a local file to a remote directory |
+| GET | `/api/transfers` | Progress of active and recent transfers |
+
 ### Commands & Audit
 | Method | Path | Description |
 |--------|------|-------------|
