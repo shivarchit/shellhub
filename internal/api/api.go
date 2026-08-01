@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shivarchit/shellhub/internal/auth"
@@ -110,6 +111,7 @@ func redactExec(records []config.ExecRecord, canView bool) {
 	}
 	for i := range records {
 		records[i].CommandText = ""
+		records[i].Output = ""
 		records[i].CommandHidden = true
 	}
 }
@@ -144,12 +146,24 @@ func (h *Handler) listServers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, servers)
 }
 
+// normalizeHost cleans up common paste artifacts in a host value: surrounding
+// whitespace, an ssh:// scheme prefix, a user@ prefix, and a trailing slash.
+func normalizeHost(host string) string {
+	host = strings.TrimSpace(host)
+	host = strings.TrimPrefix(host, "ssh://")
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
+	return strings.TrimSuffix(host, "/")
+}
+
 func (h *Handler) createServer(w http.ResponseWriter, r *http.Request) {
 	var srv config.Server
 	if err := readJSON(r, &srv); err != nil {
 		writeError(w, 400, err.Error())
 		return
 	}
+	srv.Host = normalizeHost(srv.Host)
 
 	// Encrypt credentials before storing
 	if h.authStore != nil && h.authStore.HasEncryptionKey() {
@@ -187,6 +201,7 @@ func (h *Handler) updateServer(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, err.Error())
 		return
 	}
+	srv.Host = normalizeHost(srv.Host)
 
 	// Encrypt credentials before storing
 	if h.authStore != nil && h.authStore.HasEncryptionKey() {
@@ -260,8 +275,12 @@ func (h *Handler) pingHost(w http.ResponseWriter, r *http.Request) {
 	if body.Port == 0 {
 		body.Port = 22
 	}
-	online, _ := h.pinger.Ping(body.Host, body.Port, 5*time.Second)
-	writeJSON(w, 200, map[string]bool{"online": online})
+	online, err := h.pinger.Ping(normalizeHost(body.Host), body.Port, 5*time.Second)
+	resp := map[string]any{"online": online}
+	if err != nil {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, 200, resp)
 }
 
 func (h *Handler) pingServer(w http.ResponseWriter, r *http.Request) {
