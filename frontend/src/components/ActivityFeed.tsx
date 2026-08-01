@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router'
 import type { AuditEntry } from '../lib/types'
 import { getAuditLog } from '../lib/api'
+import { useAuth } from '../lib/auth'
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr + 'Z').getTime()
@@ -25,6 +27,8 @@ const actionIcons: Record<string, { icon: string; color: string }> = {
 }
 
 export default function ActivityFeed() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -52,7 +56,9 @@ export default function ActivityFeed() {
   }
 
   return (
-    <div className="space-y-1">
+    <div>
+      {/* Scroll the rows, not the card, so the "View all" footer stays put. */}
+      <div className="space-y-1 max-h-80 overflow-y-auto pr-1">
       {entries.map((entry) => {
         const meta = actionIcons[entry.action] || { icon: '•', color: 'text-text-muted' }
         return (
@@ -77,7 +83,8 @@ export default function ActivityFeed() {
                   </span>
                 )}
               </div>
-              {entry.details && (
+              {/* details is the server name for server_* actions - already shown above. */}
+              {entry.details && entry.details !== entry.server_name && (
                 <p className="text-xs text-text-muted font-mono truncate mt-0.5">
                   {entry.details}
                 </p>
@@ -89,6 +96,15 @@ export default function ActivityFeed() {
           </div>
         )
       })}
+      </div>
+      {user?.permissions?.can_view_audit && (
+        <button
+          onClick={() => navigate('/audit')}
+          className="w-full mt-1 pt-2 border-t border-border text-xs text-text-muted hover:text-accent-blue transition-colors"
+        >
+          View all
+        </button>
+      )}
     </div>
   )
 }

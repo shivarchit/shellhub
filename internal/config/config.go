@@ -1060,15 +1060,6 @@ func (s *Store) GetTotalExecsToday() (int, error) {
 	return count, err
 }
 
-func (s *Store) GetOnlineServerCount() (int, error) {
-	var count int
-	err := s.db.QueryRow(
-		`SELECT COUNT(DISTINCT server_id) FROM ping_history
-		 WHERE pinged_at >= datetime('now', '-5 minutes') AND online = 1`,
-	).Scan(&count)
-	return count, err
-}
-
 // --- User-Server Access Control ---
 
 // GetUserServerIDs returns the server IDs assigned to a user.

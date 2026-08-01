@@ -585,3 +585,19 @@ func TestAuditLog_ExecCreatesEntry(t *testing.T) {
 		t.Fatalf("expected details 'ls -la', got %q", entries[0].Details)
 	}
 }
+
+func TestCountOnline(t *testing.T) {
+	h, _ := setupHandler(t)
+	servers := []config.Server{{Host: "a", Port: 22}, {Host: "b", Port: 22}, {Host: "c", Port: 22}}
+
+	if got := h.countOnline(servers); got != len(servers) {
+		t.Fatalf("all reachable: expected %d, got %d", len(servers), got)
+	}
+	h.pinger = &mockPinger{online: false}
+	if got := h.countOnline(servers); got != 0 {
+		t.Fatalf("none reachable: expected 0, got %d", got)
+	}
+	if got := h.countOnline(nil); got != 0 {
+		t.Fatalf("no servers: expected 0, got %d", got)
+	}
+}

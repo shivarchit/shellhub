@@ -30,6 +30,8 @@ interface TabState {
   recording: boolean
   recordingId: number | null
   termSize: { cols: number; rows: number }
+  /** Bumped to remount TerminalTab, which re-establishes its websocket. */
+  epoch: number
 }
 
 export default function TerminalPage() {
@@ -43,6 +45,7 @@ export default function TerminalPage() {
   const [showServerPicker, setShowServerPicker] = useState(false)
   const [showDisconnectModal, setShowDisconnectModal] = useState(false)
   const [disconnectedTab, setDisconnectedTab] = useState<TabState | null>(null)
+  const [disconnectError, setDisconnectError] = useState<string | undefined>(undefined)
 
   const timerRefs = useRef<Record<string, ReturnType<typeof setInterval>>>({})
   const serversRef = useRef<Server[]>([])
@@ -77,6 +80,7 @@ export default function TerminalPage() {
         recording: false,
         recordingId: null,
         termSize: { cols: 80, rows: 24 },
+        epoch: 0,
       }
       setTabs([newTab])
       setActiveTabId(tabId)
@@ -137,7 +141,7 @@ export default function TerminalPage() {
     }, 1000)
   }, [])
 
-  const handleDisconnected = useCallback((tabId: string) => {
+  const handleDisconnected = useCallback((tabId: string, error?: string) => {
     setTabs((prev) => {
       const updated = prev.map((t) =>
         t.id === tabId ? { ...t, connected: false, recording: false } : t
@@ -145,6 +149,7 @@ export default function TerminalPage() {
       const tab = updated.find((t) => t.id === tabId)
       if (tab) {
         setDisconnectedTab(tab)
+        setDisconnectError(error)
         setShowDisconnectModal(true)
       }
       return updated
@@ -153,6 +158,18 @@ export default function TerminalPage() {
       clearInterval(timerRefs.current[tabId])
       delete timerRefs.current[tabId]
     }
+  }, [])
+
+  // Remounting the tab (new epoch) tears down the dead socket and opens a new one.
+  const handleReconnect = useCallback((tabId: string) => {
+    setShowDisconnectModal(false)
+    setTabs((prev) =>
+      prev.map((t) =>
+        t.id === tabId
+          ? { ...t, epoch: t.epoch + 1, elapsed: 0, connected: false, recording: false, recordingId: null }
+          : t
+      )
+    )
   }, [])
 
   const handleRecordingStarted = useCallback((tabId: string, recId: number) => {
@@ -192,6 +209,7 @@ export default function TerminalPage() {
       recording: false,
       recordingId: null,
       termSize: { cols: 80, rows: 24 },
+      epoch: 0,
     }
     setTabs((prev) => [...prev, newTab])
     setActiveTabId(tabId)
@@ -320,7 +338,7 @@ export default function TerminalPage() {
           <div className="flex-1 flex min-h-0 relative">
             {tabs.map((tab) => (
               <TerminalTab
-                key={tab.id}
+                key={`${tab.id}-${tab.epoch}`}
                 serverId={tab.serverId}
                 tabId={tab.id}
                 active={tab.id === activeTabId}
@@ -350,14 +368,17 @@ export default function TerminalPage() {
                   SSH
                 </span>
                 {activeTab.server && (
-                  <span>
+                  <span
+                    className="truncate max-w-[14rem]"
+                    title={`${activeTab.server.username}@${activeTab.server.host}`}
+                  >
                     {activeTab.server.username}@{activeTab.server.host}
                   </span>
                 )}
                 <span>UTF-8</span>
                 {activeTab.recording && (
-                  <span className="flex items-center gap-1 text-red-400">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  <span className="flex items-center gap-1 text-accent-red">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent-red animate-pulse" />
                     REC
                   </span>
                 )}
@@ -416,17 +437,17 @@ export default function TerminalPage() {
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
           <div className="bg-surface-800 border border-border rounded-xl p-8 max-w-sm w-full mx-4 text-center shadow-2xl">
             <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-accent-red-bg border border-accent-red-dim flex items-center justify-center">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-accent-red">
                 <path
                   d="M18 6L6 18M6 6l12 12"
-                  stroke="#ef4444"
+                  stroke="currentColor"
                   strokeWidth="2"
                   strokeLinecap="round"
                 />
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-text-primary mb-2">
-              Session Ended
+              {disconnectError ? 'Connection Failed' : 'Session Ended'}
             </h3>
             <p className="text-sm text-text-muted mb-2">
               {disconnectedTab.server?.name && (
@@ -436,15 +457,9 @@ export default function TerminalPage() {
               )}
             </p>
             <p className="text-xs text-text-muted mb-6">
-              Session lasted {formatTime(disconnectedTab.elapsed)}
+              {disconnectError ?? `Session lasted ${formatTime(disconnectedTab.elapsed)}`}
             </p>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowDisconnectModal(false)}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-surface-700 text-text-primary hover:bg-surface-600 transition-colors"
-              >
-                Keep Tab
-              </button>
               <button
                 onClick={() => {
                   setShowDisconnectModal(false)
@@ -454,10 +469,25 @@ export default function TerminalPage() {
                     handleCloseTab(disconnectedTab.id)
                   }
                 }}
-                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+                className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-surface-700 text-text-primary hover:bg-surface-600 transition-colors"
               >
                 {tabs.length <= 1 ? 'Back to Dashboard' : 'Close Tab'}
               </button>
+              {disconnectError ? (
+                <button
+                  onClick={() => handleReconnect(disconnectedTab.id)}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors"
+                >
+                  Reconnect
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowDisconnectModal(false)}
+                  className="flex-1 px-4 py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors"
+                >
+                  Keep Tab
+                </button>
+              )}
             </div>
           </div>
         </div>

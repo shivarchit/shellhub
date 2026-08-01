@@ -42,16 +42,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     user: null,
   })
 
-  const fetchUser = async () => {
+  const fetchUser = async (): Promise<UserInfo | null> => {
     try {
       const res = await fetch('/api/auth/me', { credentials: 'include' })
-      if (res.ok) {
-        const user = await res.json()
-        setState((s) => ({ ...s, user }))
-      }
+      if (res.ok) return await res.json()
     } catch {
-      // ignore - user info is supplementary
+      // ignore - treated as "no user yet"
     }
+    return null
   }
 
   const checkAuth = useCallback(async () => {
@@ -59,15 +57,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await fetch('/api/auth/status', { credentials: 'include' })
       if (res.ok) {
         const data = await res.json()
+        // Permissions gate routing, so stay in loading until the user (and its
+        // permissions) has settled - otherwise a reload of /audit renders with
+        // user=null and RequirePermission bounces to "/".
+        const user = data.authenticated ? await fetchUser() : null
         setState({
           authenticated: data.authenticated,
           setupRequired: data.setup_required,
           loading: false,
-          user: null,
+          user,
         })
-        if (data.authenticated) {
-          await fetchUser()
-        }
       } else {
         setState({ authenticated: false, setupRequired: false, loading: false, user: null })
       }
@@ -91,8 +90,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const body = await res.json().catch(() => ({ error: 'Login failed' }))
       throw new Error(body.error || `HTTP ${res.status}`)
     }
-    setState((s) => ({ ...s, authenticated: true, setupRequired: false }))
-    await fetchUser()
+    const user = await fetchUser()
+    setState((s) => ({ ...s, authenticated: true, setupRequired: false, user }))
   }
 
   const register = async (username: string, password: string) => {
@@ -106,8 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const body = await res.json().catch(() => ({ error: 'Registration failed' }))
       throw new Error(body.error || `HTTP ${res.status}`)
     }
-    setState((s) => ({ ...s, authenticated: true, setupRequired: false }))
-    await fetchUser()
+    const user = await fetchUser()
+    setState((s) => ({ ...s, authenticated: true, setupRequired: false, user }))
   }
 
   const logout = async () => {

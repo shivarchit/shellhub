@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/shivarchit/shellhub/internal/config"
@@ -48,7 +50,10 @@ func (h *Handler) getMetrics(w http.ResponseWriter, r *http.Request) {
 	servers, _ := h.store.GetServers()
 	totalServers := len(servers)
 
-	onlineCount, _ := h.store.GetOnlineServerCount()
+	// Ping live rather than reading ping_history: history is only written when a
+	// page pings (default every 30 min) while the count window is 5 min, so the
+	// stored count reads 0 even when every server card shows Online.
+	onlineCount := h.countOnline(servers)
 	execsToday, _ := h.store.GetTotalExecsToday()
 	uptimes, _ := h.store.GetAllServersUptime(hoursBack)
 	connections, _ := h.store.GetConnectionCountsByDay(hoursBack)
@@ -114,6 +119,23 @@ func (h *Handler) getMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, resp)
+}
+
+// countOnline pings every server in parallel and returns how many answered.
+func (h *Handler) countOnline(servers []config.Server) int {
+	var wg sync.WaitGroup
+	var online int64
+	for _, srv := range servers {
+		wg.Add(1)
+		go func(host string, port int) {
+			defer wg.Done()
+			if up, _ := h.pinger.Ping(host, port, 3*time.Second); up {
+				atomic.AddInt64(&online, 1)
+			}
+		}(srv.Host, srv.Port)
+	}
+	wg.Wait()
+	return int(online)
 }
 
 func (h *Handler) recordPing(w http.ResponseWriter, r *http.Request) {

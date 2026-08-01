@@ -16,7 +16,8 @@ interface TerminalTabProps {
   serverName?: string
   serverHost?: string
   onConnected: (tabId: string) => void
-  onDisconnected: (tabId: string) => void
+  /** error is set only when the socket never opened or closed abnormally. */
+  onDisconnected: (tabId: string, error?: string) => void
   onRecordingStarted: (tabId: string, recId: number) => void
   onRecordingStopped: (tabId: string) => void
   onTermSize: (tabId: string, cols: number, rows: number) => void
@@ -46,6 +47,7 @@ export default function TerminalTab({
   const [connected, setConnected] = useState(false)
   const [showConnectAnim, setShowConnectAnim] = useState(true)
   const mountedRef = useRef(false)
+  const openedRef = useRef(false)
 
   // Initialize terminal on mount
   useEffect(() => {
@@ -114,6 +116,7 @@ export default function TerminalTab({
     ws.binaryType = 'arraybuffer'
 
     ws.onopen = () => {
+      openedRef.current = true
       setConnected(true)
       setShowConnectAnim(false)
       onConnected(tabId)
@@ -138,9 +141,15 @@ export default function TerminalTab({
       term.write(new Uint8Array(event.data as ArrayBuffer))
     }
 
-    ws.onclose = () => {
+    ws.onclose = (e: CloseEvent) => {
       setConnected(false)
-      onDisconnected(tabId)
+      let error: string | undefined
+      if (!openedRef.current) {
+        error = e.reason || 'Could not open a session on this server.'
+      } else if (!e.wasClean) {
+        error = e.reason || `Connection lost (code ${e.code}).`
+      }
+      onDisconnected(tabId, error)
       term.write('\r\n\x1b[31mDisconnected.\x1b[0m\r\n')
     }
 
