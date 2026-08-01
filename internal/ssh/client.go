@@ -1,6 +1,7 @@
 package ssh
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"time"
@@ -54,9 +55,19 @@ func (c *Client) Connect(server config.Server) (*gossh.Client, error) {
 	case "key":
 		signer, err := gossh.ParsePrivateKey([]byte(server.PrivateKey))
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse private key: %w", err)
+			// Encrypted keys need the passphrase, carried in the password field.
+			var missing *gossh.PassphraseMissingError
+			if errors.As(err, &missing) && server.Password != "" {
+				signer, err = gossh.ParsePrivateKeyWithPassphrase([]byte(server.PrivateKey), []byte(server.Password))
+			}
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse private key: %w", err)
+			}
 		}
 		authMethods = append(authMethods, gossh.PublicKeys(signer))
+		if server.Password != "" {
+			authMethods = append(authMethods, gossh.Password(server.Password))
+		}
 	default:
 		authMethods = append(authMethods, gossh.Password(server.Password))
 	}

@@ -29,6 +29,8 @@ export default function AddEditServerModal({
   const [authType, setAuthType] = useState<'password' | 'key'>('password')
   const [privateKey, setPrivateKey] = useState('')
   const [commands, setCommands] = useState<QuickCommand[]>([])
+  const [keyFileName, setKeyFileName] = useState('')
+  const [keyFileError, setKeyFileError] = useState('')
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<boolean | null>(null)
@@ -115,11 +117,27 @@ export default function AddEditServerModal({
     }
   }
 
+  const handleKeyFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > 64 * 1024) {
+      setKeyFileName('')
+      setKeyFileError('File is larger than 64 KB - that is not a private key.')
+      return
+    }
+    setPrivateKey(await file.text())
+    setKeyFileName(file.name)
+    setKeyFileError('')
+  }
+
   const inputClass =
     'w-full px-3 py-2 text-sm bg-surface-900 border border-border text-text-primary rounded-md focus:outline-none focus:border-accent-blue placeholder:text-text-muted'
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    /* Top-anchored, not centred: centring re-positions the dialog every time the
+       password/SSH-key toggle changes the form's height. */
+    <div className="fixed inset-0 z-50 flex items-start justify-center py-[5vh] overflow-y-auto">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
@@ -238,7 +256,7 @@ export default function AddEditServerModal({
                   className={cn(
                     'flex-1 py-1.5 text-xs rounded-md border transition-colors',
                     authType === 'password'
-                      ? 'bg-accent-blue text-white border-accent-blue'
+                      ? 'bg-accent-blue text-on-accent border-accent-blue'
                       : 'bg-surface-900 text-text-muted border-border'
                   )}
                 >
@@ -250,7 +268,7 @@ export default function AddEditServerModal({
                   className={cn(
                     'flex-1 py-1.5 text-xs rounded-md border transition-colors',
                     authType === 'key'
-                      ? 'bg-accent-blue text-white border-accent-blue'
+                      ? 'bg-accent-blue text-on-accent border-accent-blue'
                       : 'bg-surface-900 text-text-muted border-border'
                   )}
                 >
@@ -274,19 +292,55 @@ export default function AddEditServerModal({
                 />
               </div>
             ) : (
-              <div>
-                <label className="block text-xs font-medium text-text-secondary mb-1">
-                  Private Key (PEM)
-                </label>
-                <textarea
-                  value={privateKey}
-                  onChange={(e) => setPrivateKey(e.target.value)}
-                  rows={6}
-                  placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-                  className={`${inputClass} font-mono text-xs`}
-                  required
-                />
-              </div>
+              <>
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-text-secondary">
+                      Private Key (PEM)
+                    </label>
+                    <label className="px-2 py-1 text-xs font-medium text-text-secondary bg-surface-700 border border-border rounded-md hover:bg-surface-600 transition-colors cursor-pointer">
+                      Load from file
+                      <input
+                        type="file"
+                        accept=".pem,.key,*/*"
+                        onChange={handleKeyFile}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                  <textarea
+                    value={privateKey}
+                    onChange={(e) => setPrivateKey(e.target.value)}
+                    rows={6}
+                    placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+                    className={`${inputClass} font-mono text-xs`}
+                    required
+                  />
+                  {keyFileError ? (
+                    <p className="mt-1 text-xs text-accent-red">{keyFileError}</p>
+                  ) : keyFileName ? (
+                    <p className="mt-1 text-xs text-text-muted">
+                      Loaded {keyFileName}
+                    </p>
+                  ) : null}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">
+                    Passphrase / fallback password (optional)
+                  </label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="********"
+                    className={inputClass}
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    Used to unlock an encrypted key, and as password auth fallback.
+                  </p>
+                </div>
+              </>
             )}
 
             {/* Group */}
@@ -384,7 +438,7 @@ export default function AddEditServerModal({
             <button
               type="submit"
               disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-white bg-accent-blue rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+              className="px-4 py-2 text-sm font-medium text-on-accent bg-accent-blue rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
             >
               {saving ? 'Saving...' : server ? 'Save Changes' : 'Add Server'}
             </button>
