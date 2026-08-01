@@ -17,7 +17,9 @@ import ExecModal from '../components/ExecModal'
 import ActivityFeed from '../components/ActivityFeed'
 import BroadcastModal from '../components/BroadcastModal'
 import Logo from '../components/Logo'
+import StatusDot from '../components/StatusDot'
 import { useAuth } from '../lib/auth'
+import { cn } from '../lib/utils'
 
 interface ExecState {
   result: ExecResult
@@ -182,23 +184,19 @@ export default function Dashboard() {
   }
 
   const canBroadcast = user?.permissions?.can_exec_commands && servers.length > 0
+  const onlineCount = servers.filter((s) => onlineMap[s.id]).length
+
+  // Fleet health groups, in sidebar order.
+  const groups: [string, Server[]][] = []
+  for (const s of servers) {
+    const name = s.group || 'Ungrouped'
+    const found = groups.find(([g]) => g === name)
+    if (found) found[1].push(s)
+    else groups.push([name, [s]])
+  }
 
   return (
     <div className="flex h-screen bg-surface-900 font-sans">
-      {canBroadcast && !selectedServer && (
-        <button
-          onClick={() => setShowBroadcast(true)}
-          className="fixed top-4 right-5 z-40 flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-text-secondary bg-surface-800 border border-border rounded-lg hover:border-accent-blue hover:text-accent-blue transition-colors shadow-lg"
-          title="Broadcast a command to multiple servers"
-        >
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-            <circle cx="8" cy="8" r="1.5" fill="currentColor" />
-            <path d="M4.5 4.5a5 5 0 000 7M11.5 4.5a5 5 0 010 7M2.5 2.5a8 8 0 000 11M13.5 2.5a8 8 0 010 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          </svg>
-          Broadcast
-        </button>
-      )}
-
       <Sidebar
         servers={servers}
         selectedId={selectedId}
@@ -206,6 +204,7 @@ export default function Dashboard() {
         onSelect={handleSelect}
         onAdd={handleAdd}
         onReorder={fetchServers}
+        onHome={() => setSelectedId(null)}
       />
 
       {loading ? (
@@ -223,27 +222,116 @@ export default function Dashboard() {
           onExecComplete={handleExecComplete}
         />
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center px-6">
-          <div className="text-center mb-8">
-            <div className="flex items-center justify-center mx-auto mb-4">
-              <Logo size={64} />
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Page header, aligned to the content column */}
+          <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-border shrink-0">
+            <div className="min-w-0">
+              <h1 className="text-base font-semibold text-text-primary">Overview</h1>
+              <p className="text-xs text-text-muted">
+                {servers.length === 0
+                  ? 'No servers yet'
+                  : `${onlineCount} of ${servers.length} server${servers.length === 1 ? '' : 's'} online`}
+              </p>
             </div>
-            <h2 className="text-xl font-semibold text-text-primary mb-2">
-              Welcome to ShellHub
-            </h2>
-            <p className="text-sm text-text-muted max-w-xs">
-              Select a server from the sidebar to view details and run commands,
-              or add a new one to get started.
-            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              {user?.permissions?.can_manage_servers && (
+                <button
+                  onClick={handleAdd}
+                  className="px-3.5 py-2 text-sm font-medium text-text-secondary bg-surface-700 border border-border rounded-lg hover:bg-surface-600 transition-colors"
+                >
+                  Add Server
+                </button>
+              )}
+              {canBroadcast && (
+                <button
+                  onClick={() => setShowBroadcast(true)}
+                  className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-on-accent bg-accent-blue rounded-lg hover:opacity-90 transition-opacity"
+                  title="Broadcast a command to multiple servers"
+                >
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                    <circle cx="8" cy="8" r="1.5" fill="currentColor" />
+                    <path d="M4.5 4.5a5 5 0 000 7M11.5 4.5a5 5 0 010 7M2.5 2.5a8 8 0 000 11M13.5 2.5a8 8 0 010 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  Broadcast
+                </button>
+              )}
+            </div>
           </div>
-          <div className="w-full max-w-lg">
-            <div className="flex items-center gap-2 mb-3 px-2">
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-text-muted">
-                <path d="M2 3h12M2 7h8M2 11h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-              <span className="text-xs font-mono text-text-muted uppercase tracking-wider">Recent Activity</span>
+
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+            {/* Compact welcome strip */}
+            <div className="flex items-center gap-3 bg-surface-800 border border-border rounded-xl px-4 py-3 mb-6">
+              <Logo size={28} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-text-primary">
+                  Welcome back, {user?.username ?? 'there'}
+                </p>
+                <p className="text-xs text-text-muted">
+                  Select a server from the sidebar to open details, or run a command across the fleet.
+                </p>
+              </div>
             </div>
-            <div className="bg-surface-800 border border-border rounded-xl p-3 max-h-[400px] overflow-y-auto">
+
+            {/* Fleet health */}
+            {groups.length > 0 && (
+              <>
+                <p className="text-xs font-mono text-text-muted uppercase tracking-wider mb-2.5">Fleet health</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-6">
+                  {groups.map(([name, list]) => {
+                    const up = list.filter((s) => onlineMap[s.id]).length
+                    const degraded = up < list.length
+                    return (
+                      <div
+                        key={name}
+                        className={cn(
+                          'bg-surface-800 border rounded-xl px-4 py-3',
+                          degraded ? 'border-accent-red-dim' : 'border-border'
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-sm font-semibold text-text-primary truncate">{name}</span>
+                          <span
+                            className={cn(
+                              'text-xs font-mono shrink-0',
+                              degraded ? 'text-accent-red' : 'text-accent-green'
+                            )}
+                          >
+                            {up}/{list.length} up
+                          </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-surface-700 overflow-hidden my-2.5">
+                          <div
+                            className={cn('h-full rounded-full transition-all', degraded ? 'bg-accent-red' : 'bg-accent-green')}
+                            style={{ width: `${(up / list.length) * 100}%` }}
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {list.map((s) => (
+                            <button
+                              key={s.id}
+                              onClick={() => handleSelect(s.id)}
+                              className={cn(
+                                'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] border transition-colors',
+                                onlineMap[s.id]
+                                  ? 'bg-surface-700 border-border text-text-secondary hover:text-text-primary'
+                                  : 'bg-accent-red-bg border-accent-red-dim text-accent-red'
+                              )}
+                            >
+                              <StatusDot online={!!onlineMap[s.id]} size="sm" />
+                              {s.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Recent activity */}
+            <p className="text-xs font-mono text-text-muted uppercase tracking-wider mb-2.5">Recent Activity</p>
+            <div className="bg-surface-800 border border-border rounded-xl p-3">
               <ActivityFeed />
             </div>
           </div>
@@ -266,7 +354,7 @@ export default function Dashboard() {
 
       {/* Broadcast Modal */}
       {showBroadcast && (
-        <BroadcastModal servers={servers} onClose={() => setShowBroadcast(false)} />
+        <BroadcastModal servers={servers} onlineMap={onlineMap} onClose={() => setShowBroadcast(false)} />
       )}
 
       {/* Exec Result Modal */}

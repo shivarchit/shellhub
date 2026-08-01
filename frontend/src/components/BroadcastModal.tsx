@@ -23,13 +23,18 @@ interface CardState {
 
 interface BroadcastModalProps {
   servers: Server[]
+  /** Live ping results; a server missing from the map counts as reachable. */
+  onlineMap?: Record<number, boolean>
   onClose: () => void
 }
 
-export default function BroadcastModal({ servers, onClose }: BroadcastModalProps) {
+export default function BroadcastModal({ servers, onlineMap = {}, onClose }: BroadcastModalProps) {
+  const isOffline = (id: number) => onlineMap[id] === false
   const [command, setCommand] = useState('')
   const [commandName, setCommandName] = useState<string | undefined>(undefined)
-  const [selected, setSelected] = useState<Set<number>>(() => new Set(servers.map((s) => s.id)))
+  const [selected, setSelected] = useState<Set<number>>(
+    () => new Set(servers.filter((s) => onlineMap[s.id] !== false).map((s) => s.id))
+  )
   const [results, setResults] = useState<Record<number, CardState>>({})
   const [running, setRunning] = useState(false)
   const [elapsed, setElapsed] = useState(0)
@@ -86,10 +91,10 @@ export default function BroadcastModal({ servers, onClose }: BroadcastModalProps
       return next
     })
 
-  const selectGroup = (group: Server[]) =>
+  const setGroup = (group: Server[], on: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev)
-      group.forEach((s) => next.add(s.id))
+      group.forEach((s) => (on ? next.add(s.id) : next.delete(s.id)))
       return next
     })
 
@@ -191,7 +196,7 @@ export default function BroadcastModal({ servers, onClose }: BroadcastModalProps
                   setCommandName(gc.name)
                 }
               }}
-              className="bg-surface-900 border border-border-medium rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-accent-blue"
+              className="select-themed bg-surface-900 border border-border-medium rounded-lg px-3 py-2.5 text-sm text-text-secondary focus:outline-none focus:border-accent-blue"
             >
               <option value="">Saved command…</option>
               {globalCommands.map((g) => (
@@ -201,46 +206,82 @@ export default function BroadcastModal({ servers, onClose }: BroadcastModalProps
               ))}
             </select>
           )}
+          <span className="font-mono text-xs text-text-secondary whitespace-nowrap">
+            <b className="text-text-primary">{selected.size}</b> of {servers.length} selected
+          </span>
           <button
             onClick={handleRun}
             disabled={running || !command.trim() || selected.size === 0}
-            className="bg-accent-blue text-white font-semibold text-sm px-5 py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
+            className="bg-accent-blue text-on-accent font-semibold text-sm px-5 py-2.5 rounded-lg hover:opacity-90 transition-opacity disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {running ? 'Running…' : `Run on ${selected.size} server${selected.size === 1 ? '' : 's'}`}
           </button>
         </div>
 
-        {/* Target chips */}
-        <div className="flex flex-wrap gap-2 px-5 py-3.5 border-b border-border">
-          {[...grouped.entries()].map(([group, groupServers]) => (
-            <div key={group} className="flex flex-wrap gap-2">
-              {groupServers.map((s) => {
-                const on = selected.has(s.id)
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => toggle(s.id)}
-                    className={cn(
-                      'inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
-                      on
-                        ? 'border-accent-blue bg-accent-blue/10 text-text-primary'
-                        : 'border-border-medium text-text-secondary hover:text-text-primary'
-                    )}
-                  >
-                    <span className={cn('w-1.5 h-1.5 rounded-full', on ? 'bg-accent-blue' : 'bg-text-muted')} />
-                    {s.name}
-                    <span className="text-[10px] text-text-muted uppercase">{group}</span>
-                  </button>
-                )
-              })}
-              <button
-                onClick={() => selectGroup(groupServers)}
-                className="inline-flex items-center text-xs px-3 py-1.5 rounded-full border border-dashed border-border-medium text-text-muted hover:text-text-primary transition-colors"
+        {/* Targets: one row per group - label + select-all pinned left, chips flow after */}
+        <div className="border-b border-border max-h-[38vh] overflow-y-auto">
+          {[...grouped.entries()].map(([group, groupServers]) => {
+            const selectable = groupServers.filter((s) => !isOffline(s.id))
+            const allOn = selectable.length > 0 && selectable.every((s) => selected.has(s.id))
+            return (
+              <div
+                key={group}
+                className="flex items-start gap-4 px-5 py-3 border-b border-border last:border-b-0"
               >
-                + all {group}
-              </button>
-            </div>
-          ))}
+                <label
+                  className={cn(
+                    'flex items-center gap-2 w-44 shrink-0 pt-1',
+                    selectable.length > 0 ? 'cursor-pointer' : 'opacity-50'
+                  )}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allOn}
+                    disabled={selectable.length === 0}
+                    onChange={() => setGroup(selectable, !allOn)}
+                    className="accent-accent-blue"
+                  />
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary truncate">
+                    {group}
+                  </span>
+                  <span className="text-[10px] text-text-muted bg-surface-700 px-1.5 py-0.5 rounded-full">
+                    {groupServers.length}
+                  </span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {groupServers.map((s) => {
+                    const off = isOffline(s.id)
+                    const on = selected.has(s.id)
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => toggle(s.id)}
+                        disabled={off}
+                        title={off ? 'Server is offline' : undefined}
+                        className={cn(
+                          'inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+                          off
+                            ? 'border-border text-text-dimmed cursor-not-allowed'
+                            : on
+                              ? 'border-accent-blue bg-accent-blue/10 text-text-primary'
+                              : 'border-border-medium text-text-secondary hover:text-text-primary'
+                        )}
+                      >
+                        <span
+                          className={cn(
+                            'w-1.5 h-1.5 rounded-full',
+                            off ? 'bg-accent-red' : on ? 'bg-accent-blue' : 'bg-text-muted'
+                          )}
+                        />
+                        {s.name}
+                        {off && <span className="text-[10px] uppercase text-text-muted">offline</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Summary line */}

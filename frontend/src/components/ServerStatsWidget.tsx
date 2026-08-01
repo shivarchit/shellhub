@@ -10,48 +10,46 @@ interface ServerStatsWidgetProps {
   online: boolean
 }
 
-function ProgressBar({ value, max, color }: { value: number; max: number; color: string }) {
-  const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0
-  return (
-    <div className="w-full h-2 bg-surface-700 rounded-full overflow-hidden">
-      <div
-        className={`h-full rounded-full transition-all duration-500 ${color}`}
-        style={{ width: `${pct}%` }}
-      />
-    </div>
-  )
+// All five stat cards share one anatomy: label / big value / fixed-height
+// slot / mono footnote, so the eye-lines align across the row.
+const GRID = 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3'
+
+function barColor(pct: number): string {
+  return pct > 80 ? 'bg-accent-red' : pct > 60 ? 'bg-accent-amber' : 'bg-accent-green'
 }
 
-function CircularProgress({ value, size = 64 }: { value: number; size?: number }) {
-  const radius = (size - 8) / 2
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (value / 100) * circumference
-  const color = value > 80 ? '#ef4444' : value > 60 ? '#f59e0b' : '#22c55e'
-
+function MetricCard({
+  label,
+  value,
+  unit,
+  pct,
+  footnote,
+}: {
+  label: string
+  value: string
+  unit?: string
+  // No stats-history endpoint exists, so cards without a ratio (uptime, load)
+  // get a flat track instead of a sparkline. Swap in a spark when one lands.
+  pct?: number
+  footnote: string
+}) {
   return (
-    <svg width={size} height={size} className="transform -rotate-90">
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke="currentColor"
-        strokeWidth="4"
-        fill="none"
-        className="text-surface-700"
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        stroke={color}
-        strokeWidth="4"
-        fill="none"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        className="transition-all duration-500"
-      />
-    </svg>
+    <div className="bg-surface-800 rounded-lg border border-border p-4 flex flex-col">
+      <p className="text-xs text-text-muted mb-1.5">{label}</p>
+      <p className="text-xl font-semibold text-text-primary leading-none truncate" title={`${value}${unit ?? ''}`}>
+        {value}
+        {unit && <span className="text-sm font-normal text-text-muted">{unit}</span>}
+      </p>
+      <div className="h-2 my-3 w-full bg-surface-700 rounded-full overflow-hidden">
+        {pct !== undefined && (
+          <div
+            className={`h-full rounded-full transition-all duration-500 ${barColor(pct)}`}
+            style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }}
+          />
+        )}
+      </div>
+      <p className="text-[10px] font-mono text-text-muted mt-auto truncate">{footnote}</p>
+    </div>
   )
 }
 
@@ -127,7 +125,7 @@ function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
     return (
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-text-primary mb-3">System Stats</h2>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className={GRID}>
           {[...Array(5)].map((_, i) => (
             <div key={i} className="bg-surface-800 rounded-lg border border-border p-4 animate-pulse">
               <div className="h-3 bg-surface-700 rounded w-16 mb-3" />
@@ -171,62 +169,39 @@ function ServerStatsWidget({ serverId, online }: ServerStatsWidgetProps) {
   return (
     <div className="mb-6">
       <h2 className="text-lg font-semibold text-text-primary mb-3">System Stats</h2>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        {/* CPU */}
-        <div className="bg-surface-800 rounded-lg border border-border p-4 flex flex-col items-center">
-          <p className="text-xs text-text-muted mb-2 self-start">CPU</p>
-          <div className="relative">
-            <CircularProgress value={stats.cpu} size={56} />
-            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-text-primary transform rotate-0">
-              {stats.cpu.toFixed(0)}%
-            </span>
-          </div>
-        </div>
-
-        {/* Memory */}
-        <div className="bg-surface-800 rounded-lg border border-border p-4">
-          <p className="text-xs text-text-muted mb-2">Memory</p>
-          <p className="text-sm font-semibold text-text-primary mb-2">
-            {formatMem(stats.mem_used_mb)} / {formatMem(stats.mem_total_mb)}
-          </p>
-          <ProgressBar
-            value={stats.mem_used_mb}
-            max={stats.mem_total_mb}
-            color={memPct > 80 ? 'bg-accent-red' : memPct > 60 ? 'bg-yellow-500' : 'bg-accent-green'}
-          />
-          <p className="text-[10px] text-text-muted mt-1">{memPct.toFixed(0)}% used</p>
-        </div>
-
-        {/* Disk */}
-        <div className="bg-surface-800 rounded-lg border border-border p-4">
-          <p className="text-xs text-text-muted mb-2">Disk</p>
-          <p className="text-sm font-semibold text-text-primary mb-2">
-            {stats.disk_used_gb} GB / {stats.disk_total_gb} GB
-          </p>
-          <ProgressBar
-            value={stats.disk_used_gb}
-            max={stats.disk_total_gb}
-            color={diskPct > 80 ? 'bg-accent-red' : diskPct > 60 ? 'bg-yellow-500' : 'bg-accent-green'}
-          />
-          <p className="text-[10px] text-text-muted mt-1">{diskPct.toFixed(0)}% used</p>
-        </div>
-
-        {/* Uptime */}
-        <div className="bg-surface-800 rounded-lg border border-border p-4">
-          <p className="text-xs text-text-muted mb-2">Uptime</p>
-          <p className="text-sm font-semibold text-text-primary">{stats.uptime || 'N/A'}</p>
-        </div>
-
-        {/* Load Average */}
-        <div className="bg-surface-800 rounded-lg border border-border p-4">
-          <p className="text-xs text-text-muted mb-2">Load Average</p>
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm font-bold text-text-primary">{stats.load_1.toFixed(2)}</span>
-            <span className="text-xs text-text-muted">{stats.load_5.toFixed(2)}</span>
-            <span className="text-xs text-text-dimmed">{stats.load_15.toFixed(2)}</span>
-          </div>
-          <p className="text-[10px] text-text-muted mt-1">1m / 5m / 15m</p>
-        </div>
+      <div className={GRID}>
+        <MetricCard
+          label="CPU"
+          value={stats.cpu.toFixed(0)}
+          unit="%"
+          pct={stats.cpu}
+          footnote={`1m load ${stats.load_1.toFixed(2)}`}
+        />
+        <MetricCard
+          label="Memory"
+          value={formatMem(stats.mem_used_mb)}
+          unit={` / ${formatMem(stats.mem_total_mb)}`}
+          pct={memPct}
+          footnote={`${memPct.toFixed(0)}% used`}
+        />
+        <MetricCard
+          label="Disk"
+          value={`${stats.disk_used_gb} GB`}
+          unit={` / ${stats.disk_total_gb} GB`}
+          pct={diskPct}
+          footnote={`${diskPct.toFixed(0)}% used`}
+        />
+        <MetricCard
+          label="Uptime"
+          value={stats.uptime || 'N/A'}
+          footnote="since last boot"
+        />
+        <MetricCard
+          label="Load Average"
+          value={stats.load_1.toFixed(2)}
+          unit={` ${stats.load_5.toFixed(2)} ${stats.load_15.toFixed(2)}`}
+          footnote="1m / 5m / 15m"
+        />
       </div>
     </div>
   )

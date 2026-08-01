@@ -5,6 +5,7 @@ import type { UserPermissionsPayload } from '../lib/api'
 import type { LoginAttempt, GlobalCommand, GlobalCommandInput, Server } from '../lib/types'
 import { useAuth } from '../lib/auth'
 import { useTheme } from '../lib/theme'
+import { cn } from '../lib/utils'
 
 interface UserRecord {
   id: number
@@ -35,6 +36,38 @@ const DEFAULT_PERMS: UserPermissionsPayload = {
   can_view_db: false,
 }
 
+const PERM_ITEMS = [
+  { key: 'can_open_terminal', label: 'Open Terminal', desc: 'Connect to servers via terminal' },
+  { key: 'can_exec_commands', label: 'Execute Commands', desc: 'Run quick commands on servers' },
+  { key: 'can_manage_servers', label: 'Manage Servers', desc: 'Add, edit, delete servers' },
+  { key: 'can_view_recordings', label: 'View Recordings', desc: 'Access session recordings' },
+  { key: 'can_view_metrics', label: 'View Metrics', desc: 'Access metrics dashboard' },
+  { key: 'can_view_audit', label: 'View Audit Trail', desc: 'Access audit log' },
+  { key: 'can_view_db', label: 'View Database', desc: 'Access database browser' },
+] as const
+
+const NO_PERMS: UserPermissionsPayload = {
+  can_view_recordings: false,
+  can_view_metrics: false,
+  can_view_audit: false,
+  can_manage_servers: false,
+  can_exec_commands: false,
+  can_open_terminal: false,
+  can_view_db: false,
+}
+
+const PRESETS = {
+  operator: { ...NO_PERMS, can_open_terminal: true, can_exec_commands: true, can_view_metrics: true },
+  readonly: { ...NO_PERMS, can_view_metrics: true },
+} satisfies Record<string, UserPermissionsPayload>
+
+function presetOf(p: UserPermissionsPayload): 'operator' | 'readonly' | 'custom' {
+  for (const name of ['operator', 'readonly'] as const) {
+    if (PERM_ITEMS.every(({ key }) => PRESETS[name][key] === p[key])) return name
+  }
+  return 'custom'
+}
+
 export default function Settings() {
   const navigate = useNavigate()
   const { logout, user } = useAuth()
@@ -43,6 +76,7 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [importFile, setImportFile] = useState<any>(null)
+  const [importFileName, setImportFileName] = useState('')
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
   const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState('')
@@ -112,6 +146,7 @@ export default function Settings() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    setImportFileName(file.name)
     const reader = new FileReader()
     reader.onload = () => {
       try {
@@ -133,6 +168,7 @@ export default function Settings() {
       const result = await importData(importFile, importMode)
       setImportResult(`Imported ${result.imported} servers`)
       setImportFile(null)
+      setImportFileName('')
     } catch (e) {
       setImportResult('Import failed')
     } finally {
@@ -278,6 +314,9 @@ export default function Settings() {
     setEditingPermsFor(u)
   }
 
+  const activePreset = presetOf(editPerms)
+  const grantedCount = PERM_ITEMS.filter(({ key }) => editPerms[key]).length
+
   const handleSavePerms = async () => {
     if (!editingPermsFor) return
     setSavingPerms(true)
@@ -409,7 +448,7 @@ export default function Settings() {
                   <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
                   >
                     {saving ? 'Saving...' : 'Save'}
                   </button>
@@ -439,7 +478,7 @@ export default function Settings() {
                         {THEME_SWATCHES[t].map((c, i) => (
                           <span
                             key={i}
-                            className="w-2.5 h-2.5 rounded-full border border-black/20"
+                            className="w-2.5 h-2.5 rounded-full ring-1 ring-border-medium"
                             style={{ backgroundColor: c }}
                           />
                         ))}
@@ -465,7 +504,7 @@ export default function Settings() {
                   </p>
                   <button
                     onClick={exportData}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors"
                   >
                     Export Data
                   </button>
@@ -475,12 +514,20 @@ export default function Settings() {
                   <p className="text-sm text-text-secondary mb-2">
                     Import servers and settings from a JSON file.
                   </p>
-                  <input
-                    type="file"
-                    accept=".json"
-                    onChange={handleFileChange}
-                    className="block w-full text-sm text-text-secondary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-surface-700 file:text-text-primary hover:file:bg-surface-600 file:cursor-pointer file:transition-colors"
-                  />
+                  <div className="flex items-center gap-3">
+                    <label className="px-4 py-2 text-sm font-medium rounded-lg bg-surface-700 text-text-primary border border-border hover:bg-surface-600 transition-colors cursor-pointer">
+                      Choose File
+                      <input
+                        type="file"
+                        accept=".json"
+                        onChange={handleFileChange}
+                        className="hidden"
+                      />
+                    </label>
+                    <span className="text-sm text-text-muted truncate">
+                      {importFileName || 'No file chosen'}
+                    </span>
+                  </div>
 
                   {importFile && (
                     <div className="mt-4 space-y-3">
@@ -514,7 +561,7 @@ export default function Settings() {
                       <button
                         onClick={handleImport}
                         disabled={importing}
-                        className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-green text-white hover:bg-accent-green/80 transition-colors disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-green text-on-accent hover:bg-accent-green/80 transition-colors disabled:opacity-50"
                       >
                         {importing ? 'Importing...' : 'Import'}
                       </button>
@@ -522,7 +569,7 @@ export default function Settings() {
                   )}
 
                   {importResult && (
-                    <p className={`mt-3 text-sm ${importResult.startsWith('Import') && !importResult.includes('failed') ? 'text-accent-green' : 'text-red-400'}`}>
+                    <p className={`mt-3 text-sm ${importResult.startsWith('Import') && !importResult.includes('failed') ? 'text-accent-green' : 'text-accent-red'}`}>
                       {importResult}
                     </p>
                   )}
@@ -542,7 +589,7 @@ export default function Settings() {
                   </h2>
                   <button
                     onClick={() => { handleGlobalFormReset(); setShowGlobalForm(true) }}
-                    className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
+                    className="px-3 py-1.5 text-xs font-medium text-on-accent bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
                   >
                     + Add Command
                   </button>
@@ -609,7 +656,7 @@ export default function Settings() {
                     <div className="flex items-center gap-2 pt-1">
                       <button
                         onClick={handleGlobalSave}
-                        className="px-4 py-1.5 text-xs font-medium text-white bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
+                        className="px-4 py-1.5 text-xs font-medium text-on-accent bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
                       >
                         {editingGlobal ? 'Update' : 'Add'}
                       </button>
@@ -714,7 +761,7 @@ export default function Settings() {
                   <button
                     onClick={handleChangePassword}
                     disabled={pwChanging}
-                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                    className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
                   >
                     {pwChanging ? 'Changing...' : 'Change Password'}
                   </button>
@@ -829,7 +876,7 @@ export default function Settings() {
                           .finally(() => setDbLoading(false))
                       }
                     }}
-                    className="w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                    className="select-themed w-full px-3 py-2 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
                   >
                     <option value="">Select a table...</option>
                     {dbTables.map((t) => (
@@ -921,7 +968,7 @@ export default function Settings() {
                   </h2>
                   <button
                     onClick={() => { setShowCreateUser(true); setUserError('') }}
-                    className="px-3 py-1.5 text-xs font-medium text-accent-blue bg-accent-blue-dim rounded-md hover:opacity-80 transition-opacity"
+                    className="px-3 py-1.5 text-xs font-medium text-on-accent bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
                   >
                     + Create User
                   </button>
@@ -945,7 +992,7 @@ export default function Settings() {
                         <select
                           value={newUserRole}
                           onChange={(e) => setNewUserRole(e.target.value)}
-                          className="w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+                          className="select-themed w-full px-3 py-1.5 text-sm bg-surface-800 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
                         >
                           <option value="user">User</option>
                           <option value="superadmin">Superadmin</option>
@@ -969,7 +1016,7 @@ export default function Settings() {
                       <button
                         onClick={handleCreateUser}
                         disabled={creatingUser}
-                        className="px-4 py-1.5 text-xs font-medium text-white bg-accent-blue rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
+                        className="px-4 py-1.5 text-xs font-medium text-on-accent bg-accent-blue rounded-md hover:opacity-90 transition-opacity disabled:opacity-50"
                       >
                         {creatingUser ? 'Creating...' : 'Create'}
                       </button>
@@ -1008,7 +1055,7 @@ export default function Settings() {
                                 value={u.role}
                                 onChange={(e) => handleRoleChange(u.id, e.target.value)}
                                 disabled={u.id === user?.id}
-                                className="px-2 py-0.5 text-xs bg-surface-800 border border-border rounded text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
+                                className="select-themed px-2 py-1 text-xs bg-surface-800 border border-border rounded text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
                               >
                                 <option value="user">User</option>
                                 <option value="superadmin">Superadmin</option>
@@ -1089,7 +1136,7 @@ export default function Settings() {
                     <button
                       onClick={handleSaveUserServers}
                       disabled={savingServers}
-                      className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                      className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
                     >
                       {savingServers ? 'Saving...' : 'Save Server Access'}
                     </button>
@@ -1097,55 +1144,96 @@ export default function Settings() {
                 </div>
               )}
 
-              {/* Permissions Modal */}
+              {/* Permissions Modal — same top-anchored pattern as AddEditServerModal */}
               {editingPermsFor && (
-                <div className="bg-surface-800 border border-border rounded-xl p-6 mt-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">
-                      Permissions for {editingPermsFor.username}
-                    </h2>
-                    <button
-                      onClick={() => setEditingPermsFor(null)}
-                      className="px-3 py-1 text-xs text-text-muted hover:text-text-primary transition-colors"
-                    >
-                      Close
-                    </button>
-                  </div>
-                  <p className="text-xs text-text-muted mb-3">
-                    Toggle what this user can access. Superadmins always have full access.
-                  </p>
-                  <div className="space-y-2">
-                    {([
-                      { key: 'can_open_terminal', label: 'Open Terminal', desc: 'Connect to servers via terminal' },
-                      { key: 'can_exec_commands', label: 'Execute Commands', desc: 'Run quick commands on servers' },
-                      { key: 'can_manage_servers', label: 'Manage Servers', desc: 'Add, edit, delete servers' },
-                      { key: 'can_view_recordings', label: 'View Recordings', desc: 'Access session recordings' },
-                      { key: 'can_view_metrics', label: 'View Metrics', desc: 'Access metrics dashboard' },
-                      { key: 'can_view_audit', label: 'View Audit Trail', desc: 'Access audit log' },
-                      { key: 'can_view_db', label: 'View Database', desc: 'Access database browser' },
-                    ] as const).map(({ key, label, desc }) => (
-                      <label key={key} className="flex items-center justify-between px-3 py-2.5 bg-surface-700 rounded-lg cursor-pointer hover:bg-surface-600 transition-colors">
-                        <div>
-                          <span className="text-sm text-text-primary">{label}</span>
-                          <p className="text-xs text-text-muted">{desc}</p>
+                <div className="fixed inset-0 z-50 flex items-start justify-center py-[5vh] overflow-y-auto">
+                  <div
+                    className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                    onClick={() => setEditingPermsFor(null)}
+                  />
+                  <div className="relative z-10 w-full max-w-2xl mx-4 bg-surface-800 border border-border rounded-xl shadow-2xl">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-border">
+                      <div>
+                        <h3 className="text-base font-semibold text-text-primary">
+                          Permissions for <span className="font-mono">{editingPermsFor.username}</span>
+                        </h3>
+                        <p className="text-xs text-text-muted mt-0.5">
+                          Superadmins always have full access.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setEditingPermsFor(null)}
+                        className="text-text-muted hover:text-text-primary transition-colors text-lg leading-none"
+                      >
+                        &times;
+                      </button>
+                    </div>
+
+                    <div className="px-5 py-4">
+                      {/* Role presets */}
+                      <p className="text-xs font-mono text-text-muted uppercase tracking-wider mb-2">Role preset</p>
+                      <div className="inline-flex bg-surface-700 rounded-lg p-0.5">
+                        {([
+                          ['operator', 'Operator'],
+                          ['readonly', 'Read-only'],
+                          ['custom', 'Custom'],
+                        ] as const).map(([key, label]) => (
+                          <button
+                            key={key}
+                            onClick={() => key !== 'custom' && setEditPerms(PRESETS[key])}
+                            disabled={key === 'custom'}
+                            className={cn(
+                              'px-3 py-1.5 text-xs font-medium rounded-md transition-colors',
+                              activePreset === key
+                                ? 'bg-surface-600 text-text-primary'
+                                : 'text-text-muted hover:text-text-secondary',
+                              key === 'custom' && activePreset !== 'custom' && 'cursor-default'
+                            )}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Two-column toggle grid — all 7 fit without scrolling */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
+                        {PERM_ITEMS.map(({ key, label, desc }) => (
+                          <label key={key} className="flex items-center justify-between gap-3 px-3 py-2 bg-surface-700 rounded-lg cursor-pointer hover:bg-surface-600 transition-colors">
+                            <div className="min-w-0">
+                              <span className="text-sm text-text-primary">{label}</span>
+                              <p className="text-xs text-text-muted">{desc}</p>
+                            </div>
+                            <input
+                              type="checkbox"
+                              checked={editPerms[key]}
+                              onChange={(e) => setEditPerms((p) => ({ ...p, [key]: e.target.checked }))}
+                              className="accent-accent-blue w-4 h-4 shrink-0"
+                            />
+                          </label>
+                        ))}
+                        <div className="flex items-center px-3 text-xs text-text-muted">
+                          {grantedCount} of {PERM_ITEMS.length} granted
                         </div>
-                        <input
-                          type="checkbox"
-                          checked={editPerms[key]}
-                          onChange={(e) => setEditPerms((p) => ({ ...p, [key]: e.target.checked }))}
-                          className="accent-accent-blue w-4 h-4"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  <div className="mt-4">
-                    <button
-                      onClick={handleSavePerms}
-                      disabled={savingPerms}
-                      className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
-                    >
-                      {savingPerms ? 'Saving...' : 'Save Permissions'}
-                    </button>
+                      </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex justify-end gap-2 px-5 py-3.5 border-t border-border">
+                      <button
+                        onClick={() => setEditingPermsFor(null)}
+                        className="px-4 py-2 text-sm font-medium rounded-lg text-text-secondary bg-surface-700 border border-border hover:bg-surface-600 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSavePerms}
+                        disabled={savingPerms}
+                        className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                      >
+                        {savingPerms ? 'Saving...' : 'Save Permissions'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

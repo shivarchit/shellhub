@@ -131,9 +131,9 @@ export default function Status() {
           </div>
         </div>
         <div className="flex items-center gap-2 text-text-muted text-xs font-mono">
-          {metrics?.summary && (
+          {!loading && (
             <span>
-              {metrics.summary.online_servers}/{metrics.summary.total_servers} online
+              {servers.filter((s) => onlineMap[s.id]).length}/{servers.length} online
             </span>
           )}
         </div>

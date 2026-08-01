@@ -29,23 +29,101 @@ interface SidebarProps {
   onSelect: (id: number) => void
   onAdd: () => void
   onReorder: () => void
+  onHome: () => void
 }
 
-function SortableServerItem({
-  server,
-  isSelected,
-  isOnline,
-  selectedId,
-  onSelect,
-}: {
+interface RowProps {
   server: Server
   isSelected: boolean
   isOnline: boolean
   selectedId: number | null
   onSelect: (id: number) => void
-}) {
+  compact: boolean
+  isPinned: boolean
+  onTogglePin: (id: number) => void
+}
+
+function ServerRow({
+  server,
+  isSelected,
+  isOnline,
+  selectedId,
+  onSelect,
+  compact,
+  isPinned,
+  onTogglePin,
+  handle,
+}: RowProps & { handle: React.ReactNode }) {
+  return (
+    <div className="flex items-center group/row">
+      {handle}
+      <button
+        onClick={() => onSelect(server.id)}
+        className={cn(
+          'flex-1 min-w-0 text-left px-3 rounded-lg mb-0.5 transition-all duration-200',
+          compact ? 'py-1' : 'py-2',
+          isSelected
+            ? cn(
+                'bg-surface-700/60 border-l-2',
+                isOnline
+                  ? 'border-l-accent-green shadow-glow-green'
+                  : 'border-l-accent-red shadow-glow-red'
+              )
+            : cn(
+                'border-l-2 border-l-transparent hover:bg-surface-700/40',
+                selectedId !== null
+                  ? 'opacity-60 hover:opacity-100'
+                  : 'opacity-100'
+              )
+        )}
+      >
+        <div className="flex items-center gap-2">
+          <StatusDot online={isOnline} size="sm" />
+          <span className="text-sm font-medium text-text-primary truncate">
+            {server.name}
+          </span>
+        </div>
+        {!compact && (
+          <div
+            className="text-xs text-text-muted mt-0.5 pl-4 truncate font-mono"
+            title={`${server.host}:${server.port}`}
+          >
+            {server.host}:{server.port}
+          </div>
+        )}
+      </button>
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onTogglePin(server.id)
+        }}
+        title={isPinned ? 'Unpin' : 'Pin'}
+        className={cn(
+          'px-1 flex-shrink-0 transition-opacity',
+          isPinned
+            ? 'text-accent-blue opacity-100'
+            : 'text-text-dimmed hover:text-text-muted opacity-0 group-hover/row:opacity-100 focus:opacity-100'
+        )}
+      >
+        <svg
+          width="13"
+          height="13"
+          viewBox="0 0 16 16"
+          fill={isPinned ? 'currentColor' : 'none'}
+          stroke="currentColor"
+          strokeWidth="1.2"
+        >
+          <path d="M6 1.6h4v4.1l2.2 2.9H3.8L6 5.7V1.6z" strokeLinejoin="round" />
+          <path d="M8 8.6V14" fill="none" strokeLinecap="round" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+function SortableServerItem(props: RowProps) {
   const { attributes, listeners, setNodeRef, transform, transition } =
-    useSortable({ id: server.id })
+    useSortable({ id: props.server.id })
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -53,56 +131,25 @@ function SortableServerItem({
 
   return (
     <div ref={setNodeRef} style={style} {...attributes}>
-      <div className="flex items-center">
-        <button
-          {...listeners}
-          className="px-1 cursor-grab text-text-dimmed hover:text-text-muted flex-shrink-0"
-          tabIndex={-1}
-        >
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="currentColor"
+      <ServerRow
+        {...props}
+        handle={
+          <button
+            {...listeners}
+            className="px-1 cursor-grab text-text-dimmed hover:text-text-muted flex-shrink-0"
+            tabIndex={-1}
           >
-            <circle cx="4" cy="2" r="1" />
-            <circle cx="8" cy="2" r="1" />
-            <circle cx="4" cy="6" r="1" />
-            <circle cx="8" cy="6" r="1" />
-            <circle cx="4" cy="10" r="1" />
-            <circle cx="8" cy="10" r="1" />
-          </svg>
-        </button>
-        <button
-          onClick={() => onSelect(server.id)}
-          className={cn(
-            'flex-1 text-left px-3 py-2 rounded-lg mb-0.5 transition-all duration-200 group',
-            isSelected
-              ? cn(
-                  'bg-surface-700/60 border-l-2',
-                  isOnline
-                    ? 'border-l-accent-green shadow-glow-green'
-                    : 'border-l-accent-red shadow-glow-red'
-                )
-              : cn(
-                  'border-l-2 border-l-transparent hover:bg-surface-700/40',
-                  selectedId !== null
-                    ? 'opacity-30 hover:opacity-100'
-                    : 'opacity-100'
-                )
-          )}
-        >
-          <div className="flex items-center gap-2">
-            <StatusDot online={isOnline} size="sm" />
-            <span className="text-sm font-medium text-text-primary truncate">
-              {server.name}
-            </span>
-          </div>
-          <div className="text-xs text-text-muted mt-0.5 pl-4 truncate font-mono">
-            {server.host}:{server.port}
-          </div>
-        </button>
-      </div>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+              <circle cx="4" cy="2" r="1" />
+              <circle cx="8" cy="2" r="1" />
+              <circle cx="4" cy="6" r="1" />
+              <circle cx="8" cy="6" r="1" />
+              <circle cx="4" cy="10" r="1" />
+              <circle cx="8" cy="10" r="1" />
+            </svg>
+          </button>
+        }
+      />
     </div>
   )
 }
@@ -114,11 +161,33 @@ export default function Sidebar({
   onSelect,
   onAdd,
   onReorder,
+  onHome,
 }: SidebarProps) {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [search, setSearch] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
+
+  const [pinned, setPinned] = useState<number[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('shellhub-pinned') || '[]')
+      return Array.isArray(raw) ? raw.filter((n) => typeof n === 'number') : []
+    } catch {
+      return []
+    }
+  })
+  useEffect(() => {
+    localStorage.setItem('shellhub-pinned', JSON.stringify(pinned))
+  }, [pinned])
+  const togglePin = (id: number) =>
+    setPinned((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
+
+  const [compact, setCompact] = useState(
+    () => localStorage.getItem('shellhub-sidebar-compact') === '1'
+  )
+  useEffect(() => {
+    localStorage.setItem('shellhub-sidebar-compact', compact ? '1' : '0')
+  }, [compact])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -148,15 +217,25 @@ export default function Sidebar({
     )
   }, [servers, search])
 
+  // Pinned rows live only in the PINNED group; order follows pin order.
+  const pinnedServers = useMemo(
+    () =>
+      pinned
+        .map((id) => filtered.find((s) => s.id === id))
+        .filter((s): s is Server => !!s),
+    [pinned, filtered]
+  )
+
   const grouped = useMemo(() => {
     const map = new Map<string, Server[]>()
     for (const s of filtered) {
+      if (pinned.includes(s.id)) continue
       const group = s.group || 'Ungrouped'
       if (!map.has(group)) map.set(group, [])
       map.get(group)!.push(s)
     }
     return map
-  }, [filtered])
+  }, [filtered, pinned])
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event
@@ -200,17 +279,55 @@ export default function Sidebar({
     <aside className="flex flex-col w-64 h-full bg-surface-800 border-r border-border">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-4 border-b border-border">
-        <div className="flex items-center gap-2.5">
+        <button
+          onClick={onHome}
+          className="flex items-center gap-2.5 rounded-md hover:opacity-80 transition-opacity"
+          title="Home"
+        >
           <Logo size={32} />
           <span className="text-text-primary font-semibold text-lg tracking-tight">
             ShellHub
           </span>
-        </div>
-        <button
-          onClick={() => navigate('/settings')}
-          className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-700 transition-colors"
-          title="Settings"
-        >
+        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCompact((c) => !c)}
+            className={cn(
+              'p-1.5 rounded-md hover:bg-surface-700 transition-colors',
+              compact
+                ? 'text-accent-blue'
+                : 'text-text-muted hover:text-text-primary'
+            )}
+            title={compact ? 'Comfortable list' : 'Compact list'}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2.5 4h11M2.5 8h11M2.5 12h11"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinecap="round"
+              />
+            </svg>
+          </button>
+          <button
+            onClick={onHome}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-700 transition-colors"
+            title="Home"
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path
+                d="M2.5 7.5L8 2.5l5.5 5v5.5a.5.5 0 01-.5.5h-3.5v-4h-3v4H3a.5.5 0 01-.5-.5V7.5z"
+                stroke="currentColor"
+                strokeWidth="1.2"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </button>
+          <button
+            onClick={() => navigate('/settings')}
+            className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-700 transition-colors"
+            title="Settings"
+          >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
             <path
               d="M6.5 1.5L6.1 3.2a5 5 0 00-1.3.8L3.2 3.4l-1.5 2.6 1.5 1.2a5 5 0 000 1.6l-1.5 1.2 1.5 2.6 1.6-.6a5 5 0 001.3.8l.4 1.7h3l.4-1.7a5 5 0 001.3-.8l1.6.6 1.5-2.6-1.5-1.2a5 5 0 000-1.6l1.5-1.2-1.5-2.6-1.6.6a5 5 0 00-1.3-.8L9.5 1.5h-3zM8 5.5a2.5 2.5 0 110 5 2.5 2.5 0 010-5z"
@@ -219,7 +336,8 @@ export default function Sidebar({
               fill="none"
             />
           </svg>
-        </button>
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -235,7 +353,33 @@ export default function Sidebar({
       </div>
 
       {/* Server list */}
-      <div className="flex-1 overflow-y-auto px-2 pb-2">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
+        {pinnedServers.length > 0 && (
+          <div className="mb-3">
+            <div className="flex items-center justify-between px-2 py-1.5">
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-accent-blue">
+                Pinned
+              </span>
+              <span className="text-[10px] text-text-dimmed bg-surface-700 px-1.5 py-0.5 rounded-full">
+                {pinnedServers.length}
+              </span>
+            </div>
+            {pinnedServers.map((server) => (
+              <ServerRow
+                key={server.id}
+                server={server}
+                isSelected={selectedId === server.id}
+                isOnline={onlineMap[server.id] ?? false}
+                selectedId={selectedId}
+                onSelect={onSelect}
+                compact={compact}
+                isPinned
+                onTogglePin={togglePin}
+                handle={<span className="w-5 flex-shrink-0" />}
+              />
+            ))}
+          </div>
+        )}
         {[...grouped.entries()].map(([group, groupServers]) => (
           <div key={group} className="mb-3">
             <div className="flex items-center justify-between px-2 py-1.5">
@@ -266,6 +410,9 @@ export default function Sidebar({
                       isOnline={isOnline}
                       selectedId={selectedId}
                       onSelect={onSelect}
+                      compact={compact}
+                      isPinned={false}
+                      onTogglePin={togglePin}
                     />
                   )
                 })}

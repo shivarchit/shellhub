@@ -138,7 +138,7 @@ export default function CommandCard({
             onClick={handleRun}
             disabled={status === 'running'}
             className={cn(
-              'w-full py-1.5 text-xs font-medium rounded-md transition-all duration-200',
+              'w-full py-1.5 px-2 text-xs font-medium rounded-md transition-all duration-200 whitespace-nowrap',
               status === 'idle' &&
                 'bg-surface-700 text-text-secondary hover:bg-surface-600 hover:text-text-primary',
               status === 'running' &&

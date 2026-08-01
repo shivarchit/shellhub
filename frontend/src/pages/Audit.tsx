@@ -16,6 +16,13 @@ function timeAgo(dateStr: string): string {
 
 const PAGE_SIZE = 50
 
+// Shared so the sticky header and the rows can never drift apart.
+const COLS = 'grid grid-cols-[100px_120px_1fr_70px_80px_100px] gap-3'
+
+function firstLine(s: string): string {
+  return s.trim().split('\n')[0]
+}
+
 export default function Audit() {
   const navigate = useNavigate()
   const [auditTab, setAuditTab] = useState<'commands' | 'actions'>('commands')
@@ -135,7 +142,7 @@ export default function Audit() {
           {auditTab === 'commands' && (
             <button
               onClick={handleExport}
-              className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors"
             >
               Export CSV
             </button>
@@ -156,7 +163,7 @@ export default function Audit() {
           <select
             value={filterServerId}
             onChange={(e) => { setFilterServerId(e.target.value); setPage(0) }}
-            className="px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+            className="select-themed px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
           >
             <option value="">All Servers</option>
             {servers.map((s) => (
@@ -166,26 +173,30 @@ export default function Audit() {
           <select
             value={filterExitCode}
             onChange={(e) => { setFilterExitCode(e.target.value); setPage(0) }}
-            className="px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+            className="select-themed px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
           >
             <option value="">All Results</option>
             <option value="0">Success (exit 0)</option>
             <option value="1">Failed (non-zero)</option>
           </select>
-          <input
-            type="date"
-            value={filterDateFrom}
-            onChange={(e) => { setFilterDateFrom(e.target.value); setPage(0) }}
-            className="px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
-            placeholder="From"
-          />
-          <input
-            type="date"
-            value={filterDateTo}
-            onChange={(e) => { setFilterDateTo(e.target.value); setPage(0) }}
-            className="px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
-            placeholder="To"
-          />
+          <label className="flex items-center gap-2 text-xs font-medium text-text-secondary">
+            From
+            <input
+              type="date"
+              value={filterDateFrom}
+              onChange={(e) => { setFilterDateFrom(e.target.value); setPage(0) }}
+              className="px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs font-medium text-text-secondary">
+            To
+            <input
+              type="date"
+              value={filterDateTo}
+              onChange={(e) => { setFilterDateTo(e.target.value); setPage(0) }}
+              className="px-3 py-1.5 text-sm bg-surface-900 border border-border rounded-md text-text-primary focus:outline-none focus:border-accent-blue"
+            />
+          </label>
           {(filterServerId || filterSearch || filterExitCode || filterDateFrom || filterDateTo) && (
             <button
               onClick={handleClearFilters}
@@ -198,7 +209,7 @@ export default function Audit() {
       </div>}
 
       {/* Commands Table */}
-      {auditTab === 'commands' && <div className="flex-1 overflow-y-auto p-6">
+      {auditTab === 'commands' && <div className="flex-1 overflow-y-auto px-6 pb-6">
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="w-8 h-8 border-2 border-accent-blue border-t-transparent rounded-full animate-spin" />
@@ -208,24 +219,27 @@ export default function Audit() {
             No command executions found.
           </div>
         ) : (
-          <div className="space-y-1">
-            {/* Table header */}
-            <div className="grid grid-cols-[100px_1fr_150px_2fr_80px_80px_120px] gap-3 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              <span>User</span>
-              <span>Server</span>
-              <span>Command Name</span>
-              <span>Command</span>
-              <span>Exit</span>
-              <span>Duration</span>
-              <span>Time</span>
+          <>
+            {/* Sticky table header — includes the top padding so rows scroll under it */}
+            <div className="sticky top-0 z-10 bg-surface-900 pt-6 pb-2">
+              <div className={cn(COLS, 'px-4 text-xs font-semibold uppercase tracking-wider text-text-muted')}>
+                <span>User</span>
+                <span>Server</span>
+                <span>Command</span>
+                <span className="text-right">Exit</span>
+                <span className="text-right">Duration</span>
+                <span className="text-right">Time</span>
+              </div>
             </div>
 
+            <div className="space-y-1">
             {records.map((rec) => (
               <div key={rec.id}>
                 <div
                   onClick={() => setExpandedId(expandedId === rec.id ? null : rec.id)}
                   className={cn(
-                    'grid grid-cols-[100px_1fr_150px_2fr_80px_80px_120px] gap-3 px-4 py-2.5 bg-surface-800 rounded-lg text-xs cursor-pointer hover:bg-surface-700 transition-colors items-center border-l-2',
+                    COLS,
+                    'px-4 py-2.5 bg-surface-800 rounded-lg text-xs cursor-pointer hover:bg-surface-700 transition-colors items-center border-l-2',
                     rec.exit_code === 0 ? 'border-accent-green' : 'border-accent-red'
                   )}
                 >
@@ -235,33 +249,43 @@ export default function Audit() {
                   <span className="text-text-primary font-medium truncate">
                     {rec.server_name || `Server #${rec.server_id}`}
                   </span>
-                  <span className="text-text-secondary truncate">
-                    {rec.command_name}
-                  </span>
-                  {rec.command_hidden ? (
-                    <span className="flex items-center gap-2 text-text-muted">
-                      <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0">
-                        <rect x="3" y="7" width="10" height="6" rx="1" stroke="currentColor" strokeWidth="1.3" />
-                        <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                      </svg>
-                      <span className="redact-bar h-2 w-28 rounded" />
-                      <span className="text-[10px] uppercase tracking-wide">hidden</span>
-                    </span>
-                  ) : (
-                    <span className="text-text-muted font-mono truncate">
-                      {rec.command_text}
-                    </span>
-                  )}
+                  {/* Name + command + output preview share one cell */}
+                  <div className="min-w-0">
+                    <p className="text-text-secondary font-semibold truncate">
+                      {rec.command_name}
+                    </p>
+                    {rec.command_hidden ? (
+                      <span className="flex items-center gap-2 text-text-muted mt-0.5">
+                        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="shrink-0">
+                          <rect x="3" y="7" width="10" height="6" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                          <path d="M5 7V5a3 3 0 0 1 6 0v2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                        </svg>
+                        <span className="redact-bar h-2 w-28 rounded" />
+                        <span className="text-[10px] uppercase tracking-wide">hidden</span>
+                      </span>
+                    ) : (
+                      <>
+                        <p className="text-text-muted font-mono truncate">
+                          {rec.command_text}
+                        </p>
+                        {rec.output?.trim() && (
+                          <p className="text-text-dimmed font-mono truncate text-[11px] mt-0.5">
+                            {firstLine(rec.output)}
+                          </p>
+                        )}
+                      </>
+                    )}
+                  </div>
                   <span className={cn(
-                    'font-medium',
+                    'font-medium text-right',
                     rec.exit_code === 0 ? 'text-accent-green' : 'text-accent-red'
                   )}>
                     {rec.exit_code === 0 ? 'OK' : `exit ${rec.exit_code}`}
                   </span>
-                  <span className="text-text-muted">
+                  <span className="text-text-muted text-right">
                     {rec.duration_ms > 0 ? `${rec.duration_ms}ms` : '-'}
                   </span>
-                  <span className="text-text-muted" title={rec.executed_at}>
+                  <span className="text-text-muted text-right" title={rec.executed_at}>
                     {timeAgo(rec.executed_at)}
                   </span>
                 </div>
@@ -285,7 +309,8 @@ export default function Audit() {
                 )}
               </div>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </div>}
 

@@ -82,7 +82,10 @@ export default function ServerDetail({
               {online ? 'Online' : 'Offline'}
             </span>
           </div>
-          <p className="text-sm text-text-muted font-mono">
+          <p
+            className="text-sm text-text-muted font-mono truncate max-w-md"
+            title={`${server.username}@${server.host}:${server.port}`}
+          >
             {server.username}@{server.host}:{server.port}
           </p>
         </div>
@@ -90,7 +93,7 @@ export default function ServerDetail({
         <div className="flex items-center gap-2">
           <button
             onClick={onOpenTerminal}
-            className="px-4 py-2 text-sm font-medium text-white bg-accent-blue rounded-lg hover:opacity-90 transition-opacity shadow-glow-blue"
+            className="px-4 py-2 text-sm font-medium text-on-accent bg-accent-blue rounded-lg hover:opacity-90 transition-opacity shadow-glow-blue"
           >
             Open Terminal
           </button>
@@ -122,7 +125,7 @@ export default function ServerDetail({
       </div>
 
       {/* Info grid */}
-      <div className="grid grid-cols-5 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-8">
         {[
           { label: 'Host', value: server.host },
           { label: 'Port', value: String(server.port) },
@@ -132,27 +135,24 @@ export default function ServerDetail({
             label: 'Commands',
             value: String(server.quick_commands?.length ?? 0),
           },
+          {
+            label: 'Last Connected',
+            value: lastConnected ? timeAgo(lastConnected.connected_at) : 'Never',
+          },
         ].map((item) => (
           <div
             key={item.label}
             className="bg-surface-800 rounded-lg border border-border p-4"
           >
             <p className="text-xs text-text-muted mb-1">{item.label}</p>
-            <p className="text-sm font-semibold text-text-primary font-mono">
+            <p
+              className="text-sm font-semibold text-text-primary font-mono truncate"
+              title={item.value}
+            >
               {item.value}
             </p>
           </div>
         ))}
-      </div>
-
-      {/* Last Connected */}
-      <div className="mb-8">
-        <div className="bg-surface-800 rounded-lg border border-border p-4 inline-flex items-center gap-2">
-          <p className="text-xs text-text-muted">Last Connected:</p>
-          <p className="text-sm font-semibold text-text-primary">
-            {lastConnected ? timeAgo(lastConnected.connected_at) : 'Never'}
-          </p>
-        </div>
       </div>
 
       {/* System Stats Widget */}

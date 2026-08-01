@@ -212,7 +212,7 @@ function UptimeChart({ data }: { data: { server_name: string; uptime: number }[]
   return (
     <div className="space-y-2">
       {data.map((d) => {
-        const color = d.uptime >= 99 ? 'bg-accent-green' : d.uptime >= 95 ? 'bg-yellow-500' : 'bg-accent-red'
+        const color = d.uptime >= 99 ? 'bg-accent-green' : d.uptime >= 95 ? 'bg-accent-amber' : 'bg-accent-red'
         return (
           <div key={d.server_name} className="flex items-center gap-3">
             <span className="text-xs text-text-secondary w-28 truncate flex-shrink-0" title={d.server_name}>
@@ -319,7 +319,7 @@ export default function Metrics() {
               onClick={() => setRange(r)}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
                 range === r
-                  ? 'bg-accent-blue text-white'
+                  ? 'bg-accent-blue text-on-accent'
                   : 'text-text-muted hover:text-text-primary'
               }`}
             >
