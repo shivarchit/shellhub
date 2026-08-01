@@ -112,7 +112,7 @@ export default function BroadcastModal({ servers, onlineMap = {}, onClose }: Bro
           const resolved = resolveCustomVariables(resolveBuiltinVariables(cmd, server), values)
           const start = performance.now()
           try {
-            const r = await execCommand(server.id, resolved, commandName)
+            const r = await execCommand(server.id, resolved, commandName, true)
             setResults((prev) => ({
               ...prev,
               [server.id]: {

@@ -23,6 +23,27 @@ function firstLine(s: string): string {
   return s.trim().split('\n')[0]
 }
 
+// Actions whose default "underscores to spaces" label reads badly, plus the
+// transfer actions the SFTP page emits.
+const ACTION_LABELS: Record<string, string> = {
+  broadcast_exec: 'broadcast',
+  command_exec: 'command',
+  file_pull: 'pull to mac',
+  file_push: 'push to server',
+  file_download: 'download',
+  file_upload: 'upload',
+}
+
+function actionClass(action: string): string {
+  if (action === 'broadcast_exec') return 'bg-accent-blue/10 text-accent-blue border-accent-blue'
+  if (action.includes('create') || action === 'file_push' || action === 'file_upload')
+    return 'bg-accent-green-bg text-accent-green border-accent-green-dim'
+  if (action.includes('delete')) return 'bg-accent-red-bg text-accent-red border-accent-red-dim'
+  if (action === 'file_pull' || action === 'file_download')
+    return 'bg-accent-amber-bg text-accent-amber border-accent-amber-dim'
+  return 'bg-surface-600 text-text-muted border-border'
+}
+
 export default function Audit() {
   const navigate = useNavigate()
   const [auditTab, setAuditTab] = useState<'commands' | 'actions'>('commands')
@@ -372,11 +393,9 @@ export default function Audit() {
                   </span>
                   <span className={cn(
                     'inline-flex px-2 py-0.5 rounded border text-[10px] font-semibold uppercase w-fit',
-                    entry.action.includes('create') ? 'bg-accent-green-bg text-accent-green border-accent-green-dim' :
-                    entry.action.includes('delete') ? 'bg-accent-red-bg text-accent-red border-accent-red-dim' :
-                    'bg-surface-600 text-text-muted border-border'
+                    actionClass(entry.action)
                   )}>
-                    {entry.action.replace(/_/g, ' ')}
+                    {ACTION_LABELS[entry.action] || entry.action.replace(/_/g, ' ')}
                   </span>
                   <span className="text-text-primary truncate">
                     {entry.details || '-'}
