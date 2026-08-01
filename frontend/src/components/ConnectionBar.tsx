@@ -77,7 +77,10 @@ export default function ConnectionBar({
             <span className="text-sm font-semibold text-text-primary">
               {server.name}
             </span>
-            <span className="text-xs font-mono text-text-muted">
+            <span
+              className="text-xs font-mono text-text-muted truncate max-w-[16rem]"
+              title={`${server.username}@${server.host}:${server.port}`}
+            >
               {server.username}@{server.host}:{server.port}
             </span>
           </>
@@ -89,8 +92,8 @@ export default function ConnectionBar({
 
         {/* Recording indicator */}
         {recording && (
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-red-500/10 text-red-400 border border-red-500/30">
-            <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium bg-accent-red/10 text-accent-red border border-accent-red/30">
+            <span className="w-2 h-2 rounded-full bg-accent-red animate-pulse" />
             Recording
           </div>
         )}
@@ -104,7 +107,7 @@ export default function ConnectionBar({
             className={cn(
               'px-3 py-1.5 text-xs font-medium rounded-md border transition-colors',
               recording
-                ? 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
+                ? 'bg-accent-red/10 text-accent-red border-accent-red/30 hover:bg-accent-red/20'
                 : 'bg-surface-700 text-text-secondary border-border hover:bg-surface-600'
             )}
           >
@@ -122,7 +125,7 @@ export default function ConnectionBar({
         ) : (
           <button
             onClick={onBack}
-            className="px-3 py-1.5 text-xs font-medium rounded-md bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+            className="px-3 py-1.5 text-xs font-medium rounded-md bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors"
           >
             Back to Dashboard
           </button>

@@ -95,8 +95,8 @@ export default function Login() {
           50%, 100% { opacity: 0; }
         }
         @keyframes glow-pulse {
-          0%, 100% { box-shadow: 0 0 15px rgba(59,130,246,0.3), 0 0 30px rgba(59,130,246,0.1); }
-          50% { box-shadow: 0 0 25px rgba(59,130,246,0.5), 0 0 50px rgba(59,130,246,0.2); }
+          0%, 100% { box-shadow: 0 0 15px rgb(var(--sh-accent-blue) / 0.3), 0 0 30px rgb(var(--sh-accent-blue) / 0.1); }
+          50% { box-shadow: 0 0 25px rgb(var(--sh-accent-blue) / 0.5), 0 0 50px rgb(var(--sh-accent-blue) / 0.2); }
         }
         @keyframes line-appear {
           from { opacity: 0; transform: translateX(-8px); }
@@ -110,14 +110,14 @@ export default function Login() {
             0deg,
             transparent,
             transparent 2px,
-            rgba(59,130,246,0.015) 2px,
-            rgba(59,130,246,0.015) 4px
+            rgb(var(--sh-accent-blue) / 0.015) 2px,
+            rgb(var(--sh-accent-blue) / 0.015) 4px
           );
         }
         .grid-bg {
           background-image:
-            linear-gradient(rgba(28,42,58,0.3) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(28,42,58,0.3) 1px, transparent 1px);
+            linear-gradient(rgb(var(--sh-border) / 0.5) 1px, transparent 1px),
+            linear-gradient(90deg, rgb(var(--sh-border) / 0.5) 1px, transparent 1px);
           background-size: 40px 40px;
         }
       `}</style>
@@ -144,8 +144,8 @@ export default function Login() {
                 let color = 'text-text-muted'
                 if (isOk) color = 'text-accent-green'
                 else if (isAuth) color = 'text-accent-blue'
-                else if (isSsh) color = 'text-yellow-400'
-                else if (isNet) color = 'text-cyan-400'
+                else if (isSsh) color = 'text-accent-amber'
+                else if (isNet) color = 'text-text-secondary'
 
                 return (
                   <div key={i} className={`boot-line ${color}`}>
@@ -228,7 +228,7 @@ export default function Login() {
                   <button
                     type="button"
                     onClick={() => setSetupStep(1)}
-                    className="w-full py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors"
+                    className="w-full py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors"
                   >
                     Get Started
                   </button>
@@ -296,7 +296,7 @@ export default function Login() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="w-full py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-white hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
+                    className="w-full py-2.5 text-sm font-medium rounded-lg bg-accent-blue text-on-accent hover:bg-accent-blue/80 transition-colors disabled:opacity-50"
                   >
                     {loading ? 'Please wait...' : isSetup ? 'Create Account' : 'Sign In'}
                   </button>

@@ -34,6 +34,8 @@ export default {
           muted: 'rgb(var(--sh-text-muted) / <alpha-value>)',
           dimmed: 'rgb(var(--sh-text-dimmed) / <alpha-value>)',
         },
+        // Foreground for anything sitting on an accent fill (buttons, badges).
+        'on-accent': 'rgb(var(--sh-on-accent) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['DM Sans', 'system-ui', 'sans-serif'],

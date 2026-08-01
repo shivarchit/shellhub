@@ -84,7 +84,7 @@ export default function TemplateModal({
             </button>
             <button
               type="submit"
-              className="px-4 py-1.5 text-xs font-medium text-white bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
+              className="px-4 py-1.5 text-xs font-medium text-on-accent bg-accent-blue rounded-md hover:opacity-90 transition-opacity"
             >
               Run Command
             </button>
