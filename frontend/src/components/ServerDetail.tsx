@@ -101,7 +101,7 @@ export default function ServerDetail({
             onClick={() => navigate(`/files/${server.id}`)}
             className="px-4 py-2 text-sm font-medium text-text-secondary bg-surface-700 border border-border rounded-lg hover:bg-surface-600 transition-colors"
           >
-            Files
+            SFTP
           </button>
           <button
             onClick={onEdit}

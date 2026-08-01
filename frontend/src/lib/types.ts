@@ -184,3 +184,19 @@ export interface FileEntry {
   is_dir: boolean
   mod_time: string
 }
+
+export interface LocalListing {
+  path: string
+  home: string
+  entries: FileEntry[]
+}
+
+export interface Transfer {
+  id: string
+  name: string
+  direction: 'pull' | 'push'
+  total: number
+  done: number
+  status: 'active' | 'done' | 'error'
+  error?: string
+}

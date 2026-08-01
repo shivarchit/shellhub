@@ -156,6 +156,8 @@ func (h *Handler) downloadFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", fi.Size()))
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", path.Base(p)))
+	userID, username := getUserFromRequest(r)
+	h.store.LogAuditWithUser("file_download", &srv.ID, p, userID, username)
 	io.Copy(w, f)
 }
 

@@ -1,4 +1,4 @@
-import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording, ServerStats, MetricsResponse, FileEntry } from './types'
+import type { Server, ServerInput, PingResult, ExecResult, ConnectionRecord, ExecRecord, AuditEntry, LoginAttempt, GlobalCommand, GlobalCommandInput, ExecHistoryPage, ExecHistoryFilter, SessionRecording, ServerStats, MetricsResponse, FileEntry, LocalListing, Transfer } from './types'
 
 const BASE = '/api'
 
@@ -37,10 +37,10 @@ export const reorderServers = (orders: { id: number; sort_order: number }[]) =>
 export const pingServer = (id: number) =>
   request<PingResult>(`/servers/${id}/ping`, { method: 'POST' })
 
-export const execCommand = (id: number, command: string, commandName?: string) =>
+export const execCommand = (id: number, command: string, commandName?: string, broadcast?: boolean) =>
   request<ExecResult>(`/servers/${id}/exec`, {
     method: 'POST',
-    body: JSON.stringify({ command, command_name: commandName }),
+    body: JSON.stringify({ command, command_name: commandName, broadcast }),
   })
 
 export const pingHost = (host: string, port: number) =>
@@ -202,6 +202,27 @@ export function uploadFiles(
     xhr.send(form)
   })
 }
+
+// Local filesystem + server-side transfers (superadmin only)
+export const listLocalFiles = (path?: string) =>
+  request<LocalListing>(`/localfs${path ? `?path=${encodeURIComponent(path)}` : ''}`)
+
+export const mkdirLocal = (path: string) =>
+  request<void>('/localfs/mkdir', { method: 'POST', body: JSON.stringify({ path }) })
+
+export const pullFile = (id: number, remote: string, localDir: string) =>
+  request<{ transfer_id: string }>(`/servers/${id}/files/pull`, {
+    method: 'POST',
+    body: JSON.stringify({ remote, local_dir: localDir }),
+  })
+
+export const pushFile = (id: number, local: string, remoteDir: string) =>
+  request<{ transfer_id: string }>(`/servers/${id}/files/push`, {
+    method: 'POST',
+    body: JSON.stringify({ local, remote_dir: remoteDir }),
+  })
+
+export const getTransfers = () => request<Transfer[]>('/transfers')
 
 export interface UserPermissionsPayload {
   can_view_recordings: boolean

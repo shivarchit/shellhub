@@ -46,6 +46,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/servers/{id}/files/upload", h.requirePerm(h.uploadFiles, fileAccess))
 	mux.HandleFunc("DELETE /api/servers/{id}/files", h.requirePerm(h.deleteFile, fileAccess))
 	mux.HandleFunc("POST /api/servers/{id}/files/mkdir", h.requirePerm(h.mkdirFile, fileAccess))
+	// Local filesystem + server-side transfers touch this machine's disk: superadmin only.
+	mux.HandleFunc("GET /api/localfs", h.requireSuperAdmin(h.listLocalFiles))
+	mux.HandleFunc("POST /api/localfs/mkdir", h.requireSuperAdmin(h.mkdirLocal))
+	mux.HandleFunc("POST /api/servers/{id}/files/pull", h.requireSuperAdmin(h.pullFile))
+	mux.HandleFunc("POST /api/servers/{id}/files/push", h.requireSuperAdmin(h.pushFile))
+	mux.HandleFunc("GET /api/transfers", h.requireSuperAdmin(h.getTransfers))
 	mux.HandleFunc("POST /api/ping", h.pingHost)
 	mux.HandleFunc("GET /api/servers/{id}/history", h.getConnectionHistory)
 	mux.HandleFunc("GET /api/servers/{id}/exec-history", h.getExecHistory)
@@ -338,6 +344,7 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Command     string `json:"command"`
 		CommandName string `json:"command_name"`
+		Broadcast   bool   `json:"broadcast"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, 400, err.Error())
@@ -366,7 +373,11 @@ func (h *Handler) execCommand(w http.ResponseWriter, r *http.Request) {
 		UserID:      userID,
 		Username:    username,
 	})
-	h.store.LogAuditWithUser("command_exec", &id, body.Command, userID, username)
+	action := "command_exec"
+	if body.Broadcast {
+		action = "broadcast_exec"
+	}
+	h.store.LogAuditWithUser(action, &id, body.Command, userID, username)
 	writeJSON(w, 200, map[string]any{"output": output, "exit_code": exitCode, "duration_ms": durationMs})
 }
 
